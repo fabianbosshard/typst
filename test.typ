@@ -18,4 +18,14 @@ $ e^(e^(e^matr(A))) e^(e^(e^(matr(Q) matr(W) matr(R) matr(I)))) $
 $ matr(A) = matr(W) matr(Q) $
 $ matr(A) = matr(Q) matr(R) $
 $ matr(A) = matr(I) matr(I) $
+// TeX: 1mu = 1/18 em (in math). So 0.8mu = 0.8/18 em.
+#let matrspace = 0.01 / 18 * 1em
 
+#let matri(x) = (
+  h(matrspace)
+  + underline(
+      h(-matrspace) + x + h(-matrspace)
+    )
+  + h(matrspace)
+)
+$ matri(A) = matri(W) matri(Q) $
