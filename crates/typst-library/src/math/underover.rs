@@ -13,6 +13,13 @@ pub struct UnderlineElem {
     pub body: Content,
 }
 
+// A horizontal line under content, that is oblivious to the content's descent.
+#[elem(Mathy)]
+pub struct UnderlineSmashElem {
+    #[required]
+    pub body: Content,
+}
+
 /// A horizontal line over content.
 ///
 /// ```example

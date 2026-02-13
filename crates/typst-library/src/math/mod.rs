@@ -53,6 +53,7 @@ pub fn module() -> Module {
     math.define_elem::<LimitsElem>();
     math.define_elem::<AccentElem>();
     math.define_elem::<UnderlineElem>();
+    math.define_elem::<UnderlineSmashElem>();
     math.define_elem::<OverlineElem>();
     math.define_elem::<UnderbraceElem>();
     math.define_elem::<OverbraceElem>();

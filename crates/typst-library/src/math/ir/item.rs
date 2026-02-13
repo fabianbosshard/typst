@@ -786,6 +786,8 @@ pub struct LineItem<'a> {
     pub base: MathItem<'a>,
     /// Whether the line is drawn above or below the base.
     pub position: Position,
+    /// Whether line placement is smashed for underlines.
+    pub smash: bool,
 }
 
 impl<'a> LineItem<'a> {
@@ -795,13 +797,14 @@ impl<'a> LineItem<'a> {
     pub(crate) fn create(
         base: MathItem<'a>,
         position: Position,
+        smash: bool,
         styles: StyleChain<'a>,
         span: Span,
         bump: &'a Bump,
     ) -> MathItem<'a> {
         let props =
             MathProperties::with_explicit_class(styles, base.class()).with_span(span);
-        let kind = MathKind::Line(BumpBox::new_in(Self { base, position }, bump));
+        let kind = MathKind::Line(BumpBox::new_in(Self { base, position, smash }, bump));
         MathComponent { kind, props, styles }.into()
     }
 }

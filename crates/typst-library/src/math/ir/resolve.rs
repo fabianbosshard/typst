@@ -164,6 +164,8 @@ fn resolve_realized<'a, 'v, 'e>(
         resolve_mid(elem, ctx, styles)?;
     } else if let Some(elem) = elem.to_packed::<UnderlineElem>() {
         resolve_underline(elem, ctx, styles)?;
+    } else if let Some(elem) = elem.to_packed::<UnderlineSmashElem>() {
+        resolve_underline_smash(elem, ctx, styles)?;
     } else if let Some(elem) = elem.to_packed::<CasesElem>() {
         resolve_cases(elem, ctx, styles)?;
     } else if let Some(elem) = elem.to_packed::<UnderbraceElem>() {
@@ -1183,6 +1185,25 @@ fn resolve_underline<'a, 'v, 'e>(
     ctx.push(LineItem::create(
         base,
         Position::Below,
+        false,
+        styles,
+        elem.span(),
+        &ctx.arenas.bump,
+    ));
+    Ok(())
+}
+
+/// Resolves an under line element that smashes descent.
+fn resolve_underline_smash<'a, 'v, 'e>(
+    elem: &'a Packed<UnderlineSmashElem>,
+    ctx: &mut MathResolver<'a, 'v, 'e>,
+    styles: StyleChain<'a>,
+) -> SourceResult<()> {
+    let base = ctx.resolve_into_item(&elem.body, styles)?;
+    ctx.push(LineItem::create(
+        base,
+        Position::Below,
+        true,
         styles,
         elem.span(),
         &ctx.arenas.bump,
@@ -1203,6 +1224,7 @@ fn resolve_overline<'a, 'v, 'e>(
     ctx.push(LineItem::create(
         base,
         Position::Above,
+        false,
         styles,
         elem.span(),
         &ctx.arenas.bump,
