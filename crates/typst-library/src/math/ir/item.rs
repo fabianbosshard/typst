@@ -14,7 +14,7 @@ use crate::foundations::{Content, Packed, Smart, StyleChain};
 use crate::introspection::Tag;
 use crate::layout::{Abs, Axes, Axis, BoxElem, Em, FixedAlignment, PlaceElem, Rel};
 use crate::math::{
-    Augment, CancelAngle, EquationElem, LeftRightAlternator, Limits, MathSize,
+    Augment, CancelAngle, EquationElem, LeftRightAlternator, Limits, MathSize, SquishMode,
 };
 use crate::visualize::FixedStroke;
 
@@ -338,6 +338,8 @@ pub enum MathKind<'a> {
     Cancel(BumpBox<'a, CancelItem<'a>>),
     /// A base with a line drawn above or below.
     Line(BumpBox<'a, LineItem<'a>>),
+    /// A base whose vertical metrics are squished.
+    Squish(BumpBox<'a, SquishItem<'a>>),
     /// Grouped prime symbols.
     Primes(BumpBox<'a, PrimesItem<'a>>),
     /// A text string.
@@ -802,6 +804,33 @@ impl<'a> LineItem<'a> {
         let props =
             MathProperties::with_explicit_class(styles, base.class()).with_span(span);
         let kind = MathKind::Line(BumpBox::new_in(Self { base, position }, bump));
+        MathComponent { kind, props, styles }.into()
+    }
+}
+
+/// A base with squished vertical metrics (TeX `\smash`).
+#[derive(Debug)]
+pub struct SquishItem<'a> {
+    /// The base item.
+    pub base: MathItem<'a>,
+    /// Squish mode.
+    pub mode: SquishMode,
+}
+
+impl<'a> SquishItem<'a> {
+    /// Creates a new squish item.
+    ///
+    /// The resulting item inherits its math class from the base.
+    pub(crate) fn create(
+        base: MathItem<'a>,
+        mode: SquishMode,
+        styles: StyleChain<'a>,
+        span: Span,
+        bump: &'a Bump,
+    ) -> MathItem<'a> {
+        let props =
+            MathProperties::with_explicit_class(styles, base.class()).with_span(span);
+        let kind = MathKind::Squish(BumpBox::new_in(Self { base, mode }, bump));
         MathComponent { kind, props, styles }.into()
     }
 }

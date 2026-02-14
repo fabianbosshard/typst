@@ -1,0 +1,76 @@
+% author: Fabian Bosshard % © CC BY 4.0
+\documentclass[9pt,headings=standardclasses,parskip=half]{scrartcl}
+
+% ===================== basics =====================
+\usepackage{ifthen,iftex,csquotes}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+% ===================== graphics / color =====================
+\usepackage{graphicx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[left=38mm,right=38mm,top=20mm,bottom=30mm]{geometry}
+
+% ===================== math =====================
+\usepackage{amsmath,amssymb,amsthm,mathtools,mathdots,accents}
+
+% ===================== symbols =====================
+\usepackage{pifont}
+\usepackage{marvosym}
+
+% ===================== TikZ / plots =====================
+\usepackage{tikz}
+\usetikzlibrary{arrows,arrows.meta,shapes,positioning,calc,fit,patterns,intersections,math,3d,tikzmark,decorations.pathreplacing,decorations.markings}
+\usepackage{tikz-dependency,tikz-qtree,tikz-qtree-compat,tikz-3dplot,tikzpagenodes}
+\usepackage{pgfplots}
+
+
+\newcommand*\matrspace{0.8mu}
+\newcommand{\matr}[1]{\mspace{\matrspace}\underline{\mspace{-\matrspace}\smash[b]{\boldsymbol{#1}}\mspace{-\matrspace}}\mspace{\matrspace}}
+
+
+\begin{document}
+\pagestyle{empty}
+
+
+\[
+  \matr{A} = \matr{Q}\matr{R} \boldsymbol{x}
+\]
+\[
+  \underline{\boldsymbol{A}} = \underline{\boldsymbol{Q}}\underline{\boldsymbol{R}} \boldsymbol{x}
+\]
+\[
+  \boldsymbol{A} = \boldsymbol{Q}\boldsymbol{R} \boldsymbol{x}
+\]
+\[
+  e^{\matr{A}} \neq e^{\matr{Q}}e^{\matr{R}}
+\]
+\[
+  e^{\underline{\boldsymbol{A}}} \neq e^{\underline{\boldsymbol{Q}}}e^{\underline{\boldsymbol{R}}}
+\]
+\[
+  e^{\boldsymbol{A}} \neq e^{\boldsymbol{Q}}e^{\boldsymbol{R}}
+\]
+\[
+  \matr{A}\matr{W}\matr{Q}\matr{R}\matr{I}
+\]
+\[
+  e^{\matr{A}}e^{\matr{Q}\matr{W}\matr{R}\matr{I}}
+\]
+\[
+  e^{e^{\matr{A}}}e^{e^{\matr{Q}\matr{W}\matr{R}\matr{I}}}
+\]
+\[
+  e^{e^{\boldsymbol{A}}}e^{e^{\boldsymbol{Q}\boldsymbol{W}\boldsymbol{R}\boldsymbol{I}}}
+\]
+\[
+  \matr{A} = \matr{W}\matr{Q}
+\]
+\[
+  \matr{A} = \matr{Q}\matr{R}
+\]
+\[
+  \matr{A} = \matr{I}\matr{I}
+\]
+
+\end{document}

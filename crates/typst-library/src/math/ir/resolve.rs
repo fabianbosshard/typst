@@ -164,6 +164,8 @@ fn resolve_realized<'a, 'v, 'e>(
         resolve_mid(elem, ctx, styles)?;
     } else if let Some(elem) = elem.to_packed::<UnderlineElem>() {
         resolve_underline(elem, ctx, styles)?;
+    } else if let Some(elem) = elem.to_packed::<SquishElem>() {
+        resolve_squish(elem, ctx, styles)?;
     } else if let Some(elem) = elem.to_packed::<CasesElem>() {
         resolve_cases(elem, ctx, styles)?;
     } else if let Some(elem) = elem.to_packed::<UnderbraceElem>() {
@@ -1203,6 +1205,24 @@ fn resolve_overline<'a, 'v, 'e>(
     ctx.push(LineItem::create(
         base,
         Position::Above,
+        styles,
+        elem.span(),
+        &ctx.arenas.bump,
+    ));
+    Ok(())
+}
+
+/// Resolves a squish element.
+fn resolve_squish<'a, 'v, 'e>(
+    elem: &'a Packed<SquishElem>,
+    ctx: &mut MathResolver<'a, 'v, 'e>,
+    styles: StyleChain<'a>,
+) -> SourceResult<()> {
+    let base = ctx.resolve_into_item(&elem.body, styles)?;
+    let mode = elem.mode.get(styles);
+    ctx.push(SquishItem::create(
+        base,
+        mode,
         styles,
         elem.span(),
         &ctx.arenas.bump,

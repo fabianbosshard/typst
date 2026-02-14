@@ -10,6 +10,7 @@ mod lr;
 mod matrix;
 mod op;
 mod root;
+mod squish;
 mod style;
 mod underover;
 
@@ -22,13 +23,16 @@ pub use self::lr::*;
 pub use self::matrix::*;
 pub use self::op::*;
 pub use self::root::*;
+pub use self::squish::*;
 pub use self::style::*;
 pub use self::underover::*;
 
 use typst_utils::singleton;
 use unicode_math_class::MathClass;
 
-use crate::foundations::{Content, Module, NativeElement, Scope, StyleChain, elem};
+use crate::foundations::{
+    Binding, Content, Module, NativeElement, Scope, StyleChain, elem,
+};
 use crate::layout::{Em, HElem};
 use crate::text::{FontFamily, TextElem};
 
@@ -69,6 +73,7 @@ pub fn module() -> Module {
     math.define_elem::<MatElem>();
     math.define_elem::<CasesElem>();
     math.define_elem::<RootElem>();
+    math.define_elem::<SquishElem>();
     math.define_elem::<ClassElem>();
     math.define_elem::<OpElem>();
     math.define_elem::<PrimesElem>();
@@ -103,6 +108,8 @@ pub fn module() -> Module {
 
     // Symbols.
     crate::symbols::define_math(&mut math);
+    // Keep this callable even if a `sym.squish` symbol exists.
+    math.bind("squish".into(), Binding::detached(SquishElem::ELEM));
 
     Module::new("math", math)
 }

@@ -8,6 +8,7 @@ mod radical;
 mod run;
 mod scripts;
 mod shaping;
+mod squish;
 mod table;
 mod text;
 
@@ -40,6 +41,7 @@ use self::line::layout_line;
 use self::radical::layout_radical;
 use self::run::{MathFragmentsExt, MathRunFrameBuilder};
 use self::scripts::{layout_primes, layout_scripts};
+use self::squish::layout_squish;
 use self::table::layout_table;
 use self::text::{layout_glyph, layout_text};
 
@@ -509,6 +511,7 @@ fn layout_realized(
         MathKind::Cancel(item) => layout_cancel(item, ctx, styles, props)?,
         MathKind::Radical(item) => layout_radical(item, ctx, styles, props)?,
         MathKind::Line(item) => layout_line(item, ctx, styles, props)?,
+        MathKind::Squish(item) => layout_squish(item, ctx, styles, props)?,
         MathKind::Accent(item) => layout_accent(item, ctx, styles, props)?,
         MathKind::Scripts(item) => layout_scripts(item, ctx, styles, props)?,
         MathKind::Primes(item) => layout_primes(item, ctx, styles, props)?,
