@@ -19,13 +19,55 @@ $ matr(A) = matr(W) matr(Q) $
 $ matr(A) = matr(Q) matr(R) $
 $ matr(A) = matr(I) matr(I) $
 // TeX: 1mu = 1/18 em (in math). So 0.8mu = 0.8/18 em.
-#let matrspace = 0.01 / 18 * 1em
 
-#let matri(x) = (
-  h(matrspace)
-  + underline(
-      h(-matrspace) + x + h(-matrspace)
-    )
-  + h(matrspace)
-)
-$ matri(A) = matri(W) matri(Q) $
+
+
+
+
+
+// compare vertical spacing correctness
+$
+matr(A)_(matr(A)_matr(A))^matr(A)^matr(A) // subscripts work correctly
+bold(A)_(bold(A)_bold(A))^bold(A)^bold(A) // subscripts work correctly
+$
+
+
+
+// compare horizontal spacing correctness
+$
+matr(A)_(matr(A)_matr(A))^matr(A)^matr(A) // subscripts work correctly
+$
+$
+bold(A)_(bold(A)_bold(A))^bold(A)^bold(A) // subscripts work correctly
+$
+
+
+
+// compare dfferences between the approaches
+$ 
+matr(Q)_(matr(Q)_matr(Q))^matr(Q)^matr(Q) // subscripts do not work correctly
+matr(A)_(matr(A)_matr(A))^matr(A)^matr(A) // subscripts work correctly
+matr(q)_(matr(q)_matr(q))^matr(q)^matr(q) // subscripts do not work correctly
+bold(q)_(bold(q)_bold(q))^bold(q)^bold(q) 
+bold(A)_(bold(A)_bold(A))^bold(A)^bold(A) 
+bold(Q)_(bold(Q)_bold(Q))^bold(Q)^bold(Q) // subscripts work correctly
+bold(underline(Q))_(bold(underline(Q))_bold(underline(Q)))^bold(underline(Q))^bold(underline(Q)) // subscripts work correctly (in terms of underline philosphy)
+$
+
+
+// compare vertical spacing correctness
+$
+matr(Q)_(matr(Q)_matr(Q))^matr(Q)^matr(Q) // subscripts do not work correctly
+bold(Q)_(bold(Q)_bold(Q))^bold(Q)^bold(Q) // subscripts work correctly
+$
+
+
+
+// compare horizontal spacing correctness
+$
+matr(Q)_(matr(Q)_matr(Q))^matr(Q)^matr(Q) // subscripts do not work correctly
+$
+$
+bold(Q)_(bold(Q)_bold(Q))^bold(Q)^bold(Q) // subscripts work correctly
+$
+
