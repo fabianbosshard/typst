@@ -24,9 +24,11 @@
 #test(type($squish(A, #bottom)$), content)
 
 --- math-squish-set-rule eval ---
-#set math.squish(mode: "bottom")
-#test(type($squish(A)$), content)
-#test(type($squish(A, "top")$), content)
+#let _ = {
+  set math.squish(mode: "bottom")
+  assert(type($squish(A)$) == content)
+  assert(type($squish(A, "top")$) == content)
+}
 
 --- math-squish-measure-width paged empty ---
 // Squishing should only affect vertical metrics, not width.
@@ -41,12 +43,9 @@
 // All squish modes should reduce reported height for a glyph with descent.
 #context {
   let normal = measure(text(top-edge: "bounds", bottom-edge: "bounds", $g$)).height
-  let both =
-    measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g)$)).height
-  let top =
-    measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "top")$)).height
-  let bottom =
-    measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "bottom")$)).height
+  let both = measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g)$)).height
+  let top = measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "top")$)).height
+  let bottom = measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "bottom")$)).height
 
   assert(both < normal)
   assert(top < normal)
@@ -59,12 +58,9 @@
 // Set rule should affect default mode and explicit mode should override it.
 #set math.squish(mode: "bottom")
 #context {
-  let implicit =
-    measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g)$)).height
-  let explicit =
-    measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "bottom")$)).height
-  let override =
-    measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "top")$)).height
+  let implicit = measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g)$)).height
+  let explicit = measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "bottom")$)).height
+  let override = measure(text(top-edge: "bounds", bottom-edge: "bounds", $squish(g, "top")$)).height
   assert.eq(implicit, explicit)
   assert(override != explicit)
 }
