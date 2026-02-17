@@ -1,0 +1,273 @@
+% author: Fabian Bosshard % © CC BY 4.0
+\documentclass[9pt,headings=standardclasses,parskip=half]{scrartcl}
+
+% ===================== basics =====================
+\usepackage{ifthen,iftex,csquotes}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+% ===================== graphics / color =====================
+\usepackage{graphicx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[left=38mm,right=38mm,top=20mm,bottom=30mm]{geometry}
+
+% ===================== math =====================
+\usepackage{amsmath,amssymb,amsthm,mathtools,mathdots,accents}
+
+% ===================== symbols =====================
+\usepackage{pifont}
+\usepackage{marvosym}
+
+% ===================== TikZ / plots =====================
+\usepackage{tikz}
+\usetikzlibrary{arrows,arrows.meta,shapes,positioning,calc,fit,patterns,intersections,math,3d,tikzmark,decorations.pathreplacing,decorations.markings}
+\usepackage{tikz-dependency,tikz-qtree,tikz-qtree-compat,tikz-3dplot,tikzpagenodes}
+\usepackage{pgfplots}
+
+
+
+
+\makeatletter
+% knob: multiply font rule thickness by MUL/DIV (integers only)
+\newcount\matrixsymbolthickmul \matrixsymbolthickmul=10   % numerator
+\newcount\matrixsymbolthickdiv \matrixsymbolthickdiv=10   % denominator
+\newcount\matrixsymboloffsetdiv \matrixsymboloffsetdiv=10 % vertical offset = ht(box)/this
+
+% \matrixsymbol@ takes 5 args:
+%   #1 = math style token (\displaystyle, \textstyle, \scriptstyle, \scriptscriptstyle)
+%   #2 = a math font (e.g. \textfont3, \scriptfont3, \scriptscriptfont3) used to read \fontdimen8
+%   #3 = the actual symbol/formula to typeset (usually #1 from \matrixsymbol)
+%   #4 = trim (each side) to subtract from underline width (left & right)
+%   #5 = extend (total) to add to underline width (centered extension)
+\protected\def\matrixsymbol@#1#2#3#4#5{% 
+    % Typeset the symbol in the chosen math style and store it in box0
+    \setbox0=\hbox{$\m@th#1#3$}
+    %
+    % Rule thickness: take the font's default rule thickness (fontdimen8) for the chosen font #2, then scale it by thickmul/thickdiv
+    \dimen6=\fontdimen8#2\relax
+    \multiply\dimen6 by \matrixsymbolthickmul
+    \divide\dimen6 by \matrixsymbolthickdiv
+    %
+    % Vertical placement: fixed below the baseline as a fraction of the symbol box height
+    % (distance = ht(box0)/matrixsymboloffsetdiv)
+    \dimen8=\ht0 \divide\dimen8 by \matrixsymboloffsetdiv
+    %
+    % Underline width computation:
+    % start with symbol width
+    \dimen0=\wd0 
+    % add total extension (#5)
+    \advance\dimen0 by #5\relax
+    % subtract 2 * trim (#4) because trim is per-side
+    \dimen2=#4\relax 
+    \advance\dimen0 by -2\dimen2
+    %
+    % Horizontal start shift for the underline relative to the symbol:
+    % We want the extension (#5) split equally left/right (so shift left by #5/2), then apply trim (#4) (shift right by trim).
+    % net shift = trim - extend/2
+    \dimen4=#5\relax \divide\dimen4 by 2 \dimen4=-\dimen4 \advance\dimen4 by \dimen2
+    %
+    % Output: a box whose visible content is copy0, plus an overlaid underline:
+    % - \rlap makes the underline overlay without consuming horizontal space
+    % - \smash makes it add no height/depth (so it won't affect vertical spacing)
+    % - \raise moves it below the baseline by dimen8
+    \hbox{\rlap{\smash{\raise-\dimen8\hbox{\kern\dimen4\vrule width\dimen0 height0pt depth\dimen6}}}\copy0}%
+}
+\DeclareRobustCommand{\matrixsymbol}[1]{%
+    \begingroup
+    \let\@nomath\@gobble \mathversion{bold}% make #1 bold by switching to the bold math version
+    %
+    % \math@atom{#1}{<stuff>} preserves the *atom type* of #1 (ord/op/bin/rel/...)
+    % so spacing and script placement behave like the original symbol.
+    \math@atom{#1}{%
+    \mathchoice
+    {\matrixsymbol@{\displaystyle}{\textfont3}{#1}{0.03em}{0.00em}}% 
+    {\matrixsymbol@{\textstyle}{\textfont3}{#1}{0.03em}{0.00em}}%
+    {\matrixsymbol@{\scriptstyle}{\scriptfont3}{#1}{0.03em}{0.00em}}%
+    {\matrixsymbol@{\scriptscriptstyle}{\scriptscriptfont3}{#1}{0.03em}{0.00em}}%
+    }%
+    \endgroup
+}
+\makeatother
+
+\newcommand{\matr}[1]{\matrixsymbol{#1}}
+
+\begin{document}
+\pagestyle{empty}
+
+
+\[
+  \matr{A} = \matr{Q}\matr{R} \boldsymbol{x}
+\]
+\[
+  \underline{\boldsymbol{A}} = \underline{\boldsymbol{Q}}\underline{\boldsymbol{R}} \boldsymbol{x}
+\]
+\[
+  \boldsymbol{A} = \boldsymbol{Q}\boldsymbol{R} \boldsymbol{x}
+\]
+\[
+  e^{\matr{A}} \neq e^{\matr{Q}}e^{\matr{R}}
+\]
+\[
+  e^{\underline{\boldsymbol{A}}} \neq e^{\underline{\boldsymbol{Q}}}e^{\underline{\boldsymbol{R}}}
+\]
+\[
+  e^{\boldsymbol{A}} \neq e^{\boldsymbol{Q}}e^{\boldsymbol{R}}
+\]
+\[
+  \matr{A}_1  \matr{Q}_1 \matr{R}_1
+\]
+\[
+  \boldsymbol{A}_1 \boldsymbol{Q}_1 \boldsymbol{R}_1
+\]
+\[
+\matr{A}\matr{Q}\matr{W}\matr{R}\matr{I}
+\]
+\[
+  e^{\matr{A}\matr{Q}\matr{W}\matr{R}\matr{I}}
+\]
+\[
+  e^{e^{\matr{A}\matr{Q}\matr{W}\matr{R}\matr{I}}}
+\]
+\[
+  e^{e^{\boldsymbol{A}\boldsymbol{Q}\boldsymbol{W}\boldsymbol{R}\boldsymbol{I}}}
+\]
+\[
+  \matr{A} = \matr{W}\matr{Q}
+\]
+\[
+  \matr{A} = \matr{Q}\matr{R}
+\]
+\[
+  \matr{A} = \matr{I}\matr{I}
+\]
+\[
+\tilde{\matr{\chi}}_1^{(1)} \tilde{\chi}_1^{(1)} \tilde{b}_1^{(1)}
+\]
+\[
+\matr{\chi}_1^{(1)} \chi_1^{(1)} b_1^{(1)}
+\]
+
+
+
+
+% // it seems to work...
+
+% // but it doesnt...
+
+
+% #let matr1(x) = context {
+%   let em_abs = measure(math.inline[box(width: 1em)]).width.to-absolute()
+%   let mu = em_abs / 18
+%   let matrspace = 0.1 * mu
+
+%   math.class("normal",
+%     h(matrspace)
+%     + math.underline(
+%         math.squish(h(-matrspace) + math.bold(x) + h(-matrspace), mode: "bottom")
+%       )
+%     + h(matrspace)
+%   )
+% }
+
+% #let matr2(x) = context {
+%   let em_abs = measure(math.inline[box(width: 1em)]).width.to-absolute()
+%   let mu = em_abs / 18
+%   let matrspace = 0.1 * mu
+
+%   math.class("normal", math.squish(
+%     h(matrspace)
+%     + math.underline(
+%         math.squish(h(-matrspace) + math.bold(x) + h(-matrspace), mode: "bottom")
+%       )
+%     + h(matrspace), mode: "bottom")
+%   )
+% }
+
+
+
+% // compare dfferences between the approaches
+% $ 
+% matr1(A)_(matr1(A)_matr1(A))^matr1(A)^matr1(A) // subscripts do not work correctly
+% matr2(A)_(matr2(A)_matr2(A))^matr2(A)^matr2(A) // subscripts work correctly
+% bold(A)_(bold(A)_bold(A))^bold(A)^bold(A) // subscripts work correctly
+% bold(underline(A))_(bold(underline(A))_bold(underline(A)))^bold(underline(A))^bold(underline(A)) // subscripts work correctly (in terms of underline philosphy)
+% $
+
+
+% // compare vertical spacing correctness
+% $
+% matr2(A)_(matr2(A)_matr2(A))^matr2(A)^matr2(A) // subscripts work correctly
+% bold(A)_(bold(A)_bold(A))^bold(A)^bold(A) // subscripts work correctly
+% $
+
+
+
+% // compare horizontal spacing correctness
+% $
+% matr2(A)_(matr2(A)_matr2(A))^matr2(A)^matr2(A) // subscripts work correctly
+% $
+% $
+% bold(A)_(bold(A)_bold(A))^bold(A)^bold(A) // subscripts work correctly
+% $
+
+
+
+
+
+
+% // compare dfferences between the approaches
+% $ 
+% matr1(Q)_(matr1(Q)_matr1(Q))^matr1(Q)^matr1(Q) // subscripts do not work correctly
+% matr2(Q)_(matr2(Q)_matr2(Q))^matr2(Q)^matr2(Q) // subscripts do not work correctly
+% bold(Q)_(bold(Q)_bold(Q))^bold(Q)^bold(Q) // subscripts work correctly
+% bold(underline(Q))_(bold(underline(Q))_bold(underline(Q)))^bold(underline(Q))^bold(underline(Q)) // subscripts work correctly (in terms of underline philosphy)
+% $
+
+
+% // compare vertical spacing correctness
+% $
+% matr2(Q)_(matr2(Q)_matr2(Q))^matr2(Q)^matr2(Q) // subscripts do not work correctly
+% bold(Q)_(bold(Q)_bold(Q))^bold(Q)^bold(Q) // subscripts work correctly
+% $
+
+
+
+% // compare horizontal spacing correctness
+% $
+% matr2(Q)_(matr2(Q)_matr2(Q))^matr2(Q)^matr2(Q) // subscripts do not work correctly
+% $
+% $
+% bold(Q)_(bold(Q)_bold(Q))^bold(Q)^bold(Q) // subscripts work correctly
+% $
+
+
+% compare vertical spacing
+\[
+\matr{A}_{\matr{A}_{\matr{A}}}^{\matr{A}^{\matr{A}}}
+\boldsymbol{A}_{\boldsymbol{A}_{\boldsymbol{A}}}^{\boldsymbol{A}^{\boldsymbol{A}}}
+\]
+% compare  horizontal spacing
+\[
+\matr{A}_{\matr{A}_{\matr{A}}}^{\matr{A}^{\matr{A}}}
+\]
+\[
+\boldsymbol{A}_{\boldsymbol{A}_{\boldsymbol{A}}}^{\boldsymbol{A}^{\boldsymbol{A}}}
+\]
+
+%now with Q
+% compare vertical spacing
+\[
+\matr{Q}_{\matr{Q}_{\matr{Q}}}^{\matr{Q}^{\matr{Q}}}
+\boldsymbol{Q}_{\boldsymbol{Q}_{\boldsymbol{Q}}}^{\boldsymbol{Q}^{\boldsymbol{Q}}}
+\]
+% compare  horizontal spacing
+\[
+\matr{Q}_{\matr{Q}_{\matr{Q}}}^{\matr{Q}^{\matr{Q}}}
+\]
+\[
+\boldsymbol{Q}_{\boldsymbol{Q}_{\boldsymbol{Q}}}^{\boldsymbol{Q}^{\boldsymbol{Q}}}
+\] 
+
+
+
+\end{document}
