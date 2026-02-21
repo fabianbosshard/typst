@@ -6,13 +6,13 @@
   let matrspace = 0.1 * mu
 
   math.class("normal",
-    // math.squish(
+    math.squish(
     h(matrspace)
     + math.underline(
         math.squish(h(-matrspace) + math.bold(x) + h(-matrspace), mode: "bottom")
       )
     + h(matrspace)
-    // , mode: "bottom")
+    , mode: "bottom")
   )
 }
 
@@ -150,4 +150,10 @@ $
 
 fdfkj
 
+
+fdsljfdflsdfkjj
+
+$
+  matr(A) = matr(Q)_1 matr(R)_1 bold(Q)_1
+$
 
