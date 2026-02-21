@@ -6,11 +6,13 @@
   let matrspace = 0.1 * mu
 
   math.class("normal",
-    math.squish(h(matrspace)
+    // math.squish(
+    h(matrspace)
     + math.underline(
         math.squish(h(-matrspace) + math.bold(x) + h(-matrspace), mode: "bottom")
       )
-    + h(matrspace), mode: "bottom")
+    + h(matrspace)
+    // , mode: "bottom")
   )
 }
 
@@ -40,9 +42,9 @@ $ matr(chi)_1^((1)) chi_1^((1)) b_1^((1)) $
 
 
 
-// it seems to work...
+it seems to work...
 
-// but it doesnt...
+but it doesnt...
 
 
 #let matr1(x) = context {
