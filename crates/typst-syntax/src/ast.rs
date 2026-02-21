@@ -791,6 +791,11 @@ impl<'a> EnumItem<'a> {
     pub fn body(self) -> Markup<'a> {
         self.0.cast_first()
     }
+
+    /// The trailing label, if any.
+    pub fn label(self) -> Option<Label<'a>> {
+        self.0.try_cast_last()
+    }
 }
 
 node! {

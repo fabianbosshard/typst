@@ -124,10 +124,7 @@ use crate::text::TextElem;
 ///   // Skip all other references.
 ///   if el == none or el.func() != eq { return it }
 ///   // Override equation references.
-///   link(el.location(), numbering(
-///     el.numbering,
-///     ..counter(eq).at(el.location())
-///   ))
+///   link(el.location(), counter(eq).display(at: el.location()))
 /// }
 ///
 /// = Beginnings <beginning>
@@ -253,6 +250,7 @@ impl Packed<RefElem> {
                 Counter::new(CounterKey::Page),
                 numbering.clone(),
                 supplement,
+                None,
                 elem,
             );
         }
@@ -310,6 +308,8 @@ impl Packed<RefElem> {
             ))
             .at(span)?;
 
+        let resolved = refable.reference_number(engine, styles)?;
+
         realize_reference(
             self,
             engine,
@@ -317,6 +317,7 @@ impl Packed<RefElem> {
             refable.counter(),
             numbering.clone(),
             refable.supplement(),
+            resolved,
             elem,
         )
     }
@@ -330,10 +331,15 @@ fn realize_reference(
     counter: Counter,
     numbering: Numbering,
     supplement: Content,
+    resolved: Option<Content>,
     elem: Content,
 ) -> SourceResult<Content> {
+    let span = reference.span();
     let loc = elem.location().unwrap();
-    let numbers = counter.display_at_loc(engine, loc, styles, &numbering.trimmed())?;
+    let numbers = match resolved {
+        Some(content) => content,
+        None => counter.display_at_loc(engine, loc, styles, &numbering.trimmed())?,
+    };
 
     let supplement = match reference.supplement.get_ref(styles) {
         Smart::Auto => supplement,
@@ -352,9 +358,9 @@ fn realize_reference(
         content = supplement + TextElem::packed("\u{a0}") + content;
     }
 
-    content = content.spanned(reference.span());
+    content = content.spanned(span);
 
-    Ok(DirectLinkElem::new(loc, content, Some(alt)).pack())
+    Ok(DirectLinkElem::new(loc, content, Some(alt)).pack().spanned(span))
 }
 
 /// Turn a reference into a citation.
@@ -430,4 +436,14 @@ pub trait Refable {
 
     /// Returns the numbering of this element.
     fn numbering(&self) -> Option<&Numbering>;
+
+    /// Formats this element's reference number directly, if it doesn't follow
+    /// the counter-based default.
+    fn reference_number(
+        &self,
+        _: &mut Engine,
+        _: StyleChain,
+    ) -> SourceResult<Option<Content>> {
+        Ok(None)
+    }
 }

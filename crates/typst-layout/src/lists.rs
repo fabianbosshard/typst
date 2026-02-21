@@ -1,12 +1,12 @@
-use comemo::Track;
-use smallvec::smallvec;
 use typst_library::diag::SourceResult;
 use typst_library::engine::Engine;
-use typst_library::foundations::{Content, Context, Depth, Packed, StyleChain};
+use typst_library::foundations::{Content, Depth, Packed, StyleChain};
 use typst_library::introspection::Locator;
 use typst_library::layout::grid::resolve::{Cell, CellGrid};
 use typst_library::layout::{Axes, Fragment, HAlignment, Regions, Sizing, VAlignment};
-use typst_library::model::{EnumElem, ListElem, Numbering, ParElem, ParbreakElem};
+use typst_library::model::{
+    EnumElem, ListElem, ParElem, ParbreakElem, display_enum_numbering,
+};
 use typst_library::pdf::PdfMarkerTag;
 use typst_library::text::TextElem;
 
@@ -102,20 +102,9 @@ pub fn layout_enum(
     for item in &elem.children {
         number = item.number.get(styles).unwrap_or(number);
 
-        let context = Context::new(None, Some(styles));
-        let resolved = if full {
-            parents.push(number);
-            let content = numbering.apply(engine, context.track(), &parents)?.display();
-            parents.pop();
-            content
-        } else {
-            match numbering {
-                Numbering::Pattern(pattern) => {
-                    TextElem::packed(pattern.apply_kth(parents.len(), number))
-                }
-                other => other.apply(engine, context.track(), &[number])?.display(),
-            }
-        };
+        parents.push(number);
+        let resolved = display_enum_numbering(engine, styles, numbering, &parents, full)?;
+        parents.pop();
 
         // Disable overhang as a workaround to end-aligned dots glitching
         // and decreasing spacing between numbers and items.
@@ -126,8 +115,6 @@ pub fn layout_enum(
         if !tight {
             body += ParbreakElem::shared();
         }
-
-        let body = body.set(EnumElem::parents, smallvec![number]);
 
         cells.push(Cell::new(Content::empty()));
         cells.push(Cell::new(PdfMarkerTag::ListItemLabel(resolved)));

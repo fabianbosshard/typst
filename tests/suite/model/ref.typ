@@ -97,3 +97,49 @@ Text seen on #ref(<text>, form: "page", supplement: "Page").
 // Error: 6-7 unexpected less-than operator
 // Error: 7-8 unexpected greater-than operator
 #ref(<>)
+
+--- ref-enum-item-basic paged ---
++ Alpha <enum-basic-a>
++ Beta <enum-basic-b>
+Refs: @enum-basic-a, @enum-basic-b.
+
+--- ref-enum-item-grouped paged ---
+#for text in ("Grouped A",) [+ #text <enum-group-a>]
+#for text in ("Grouped B",) [+ #text <enum-group-b>]
+Refs: @enum-group-a, @enum-group-b.
+
+--- ref-enum-item-numbering-variants paged ---
+#set enum(numbering: "1(a)", full: true)
++ Top
+  + Inner A
++ Next
+  + Inner B <enum-nested-b>
+Ref: @enum-nested-b.
+
+#set enum(numbering: "1.", full: false, start: 3)
++ Three <enum-start-3>
++ Four <enum-start-4>
+Refs: @enum-start-3, @enum-start-4.
+
+#set enum(reversed: true, start: auto)
++ First <enum-rev-1>
++ Second <enum-rev-2>
++ Third <enum-rev-3>
+Refs: @enum-rev-1, @enum-rev-2, @enum-rev-3.
+
+#set enum(reversed: false, start: auto)
+1. A <enum-exp-a>
+5. B <enum-exp-b>
++ C <enum-exp-c>
+Refs: @enum-exp-a, @enum-exp-b, @enum-exp-c.
+
+--- ref-enum-item-custom-numbering paged ---
+#set enum(numbering: n => [N=#n], full: false)
++ One <enum-custom-1>
++ Two <enum-custom-2>
+Refs: @enum-custom-1, @enum-custom-2.
+
+#set enum(numbering: (..ns) => [F=#ns.pos().map(str).join("-")], full: true)
++ P
+  + Q <enum-custom-full>
+Ref: @enum-custom-full.

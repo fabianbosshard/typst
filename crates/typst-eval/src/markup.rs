@@ -253,7 +253,12 @@ impl Eval for ast::EnumItem<'_> {
         if let Some(number) = self.number() {
             elem.number.set(Smart::Custom(number));
         }
-        Ok(elem.pack())
+        let mut content = elem.pack();
+        if let Some(label) = self.label() {
+            let Value::Label(label) = label.eval(vm)? else { unreachable!() };
+            content.set_label(label);
+        }
+        Ok(content)
     }
 }
 

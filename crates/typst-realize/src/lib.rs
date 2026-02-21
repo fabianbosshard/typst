@@ -20,15 +20,15 @@ use typst_library::foundations::{
     Styles, SymbolElem, Synthesize, TargetElem, Transformation,
 };
 use typst_library::introspection::{
-    Locatable, LocationKey, SplitLocator, Tag, TagElem, TagFlags, Tagged,
+    Locatable, Location, LocationKey, SplitLocator, Tag, TagElem, TagFlags, Tagged,
 };
 use typst_library::layout::{
     AlignElem, BoxElem, HElem, InlineElem, PageElem, PagebreakElem, VElem,
 };
 use typst_library::math::{EquationElem, Mathy};
 use typst_library::model::{
-    CiteElem, CiteGroup, DocumentElem, EnumElem, ListElem, ListItemLike, ListLike,
-    ParElem, ParbreakElem, TermsElem,
+    CiteElem, CiteGroup, DocumentElem, EnumElem, EnumItem, ListElem, ListItemLike,
+    ListLike, ParElem, ParbreakElem, TermsElem,
 };
 use typst_library::routines::{Arenas, FragmentKind, Pair, RealizationKind};
 use typst_library::text::{LinebreakElem, SmartQuoteElem, SpaceElem, TextElem};
@@ -995,7 +995,17 @@ static CITES: GroupingRule = GroupingRule {
 static LIST: GroupingRule = list_like_grouping::<ListElem>();
 
 /// Builds an `EnumElem` from grouped `EnumItem`s.
-static ENUM: GroupingRule = list_like_grouping::<EnumElem>();
+static ENUM: GroupingRule = GroupingRule {
+    priority: 2,
+    tags: true,
+    trigger: |content, _| content.elem() == EnumItem::ELEM,
+    inner: |content| {
+        let elem = content.elem();
+        elem == SpaceElem::ELEM || elem == ParbreakElem::ELEM
+    },
+    interrupt: |elem| elem == EnumElem::ELEM || elem == AlignElem::ELEM,
+    finish: finish_enum,
+};
 
 /// Builds a `TermsElem` from grouped `TermItem`s.
 static TERMS: GroupingRule = list_like_grouping::<TermsElem>();
@@ -1129,6 +1139,88 @@ fn finish_list_like<T: ListLike>(grouped: Grouped) -> SourceResult<()> {
     // Create and visit the list.
     let s = grouped.end();
     let elem = T::create(children, tight).pack().spanned(span);
+    visit(s, s.store(elem), trunk)
+}
+
+/// Builds the `EnumElem` from `EnumItem`s while preserving item tags.
+fn finish_enum(grouped: Grouped) -> SourceResult<()> {
+    // Collect the children.
+    let elems = grouped.get();
+    let span = select_span(elems);
+    let tight = !elems.iter().any(|(c, _)| c.is::<ParbreakElem>());
+    let styles = elems.iter().filter(|(c, _)| c.is::<EnumItem>()).map(|&(_, s)| s);
+    let trunk = StyleChain::trunk(styles).unwrap();
+    let trunk_depth = trunk.links().count();
+
+    let mut children = vec![];
+    let mut tags: Vec<(Option<TagFlags>, Option<(Location, u128, TagFlags)>)> = vec![];
+    let mut active: Option<usize> = None;
+    let mut pending_start: Option<TagFlags> = None;
+
+    for &(content, styles) in elems {
+        if let Some(tag) = content.to_packed::<TagElem>() {
+            match &tag.tag {
+                Tag::Start(.., flags) => {
+                    pending_start = Some(*flags);
+                    active = None;
+                }
+                Tag::End(location, key, flags) => {
+                    if let Some(index) = active {
+                        tags[index].1 = Some((*location, *key, *flags));
+                        active = None;
+                    }
+                }
+            }
+            continue;
+        }
+
+        let Some(item) = content.to_packed::<EnumItem>() else {
+            active = None;
+            continue;
+        };
+
+        let local = styles.suffix(trunk_depth);
+        let labelled = item.label().is_some();
+        children.push(EnumItem::styled(item.clone(), local));
+        tags.push(if labelled { (pending_start.take(), None) } else { (None, None) });
+        if !labelled {
+            pending_start.take();
+        }
+        active = labelled.then_some(tags.len() - 1);
+    }
+
+    // Create and synthesize the enum so the item references are resolved before
+    // we place fresh tags for them.
+    let mut elem = Packed::new(EnumElem::new(children).with_tight(tight))
+        .pack()
+        .spanned(span);
+    let packed = elem.to_packed_mut::<EnumElem>().unwrap();
+    packed.synthesize(grouped.s.engine, trunk)?;
+
+    // Rebuild item tags with the updated item content and place them around the
+    // item body so locations match the rendered list.
+    for (item, (start, end)) in packed.children.iter_mut().zip(tags) {
+        if start.is_none() && end.is_none() {
+            continue;
+        }
+
+        let mut seq = vec![];
+
+        if let Some(flags) = start {
+            seq.push(TagElem::packed(Tag::Start(item.clone().pack(), flags)));
+        }
+
+        seq.push(item.body.clone());
+
+        if let Some((location, key, flags)) = end {
+            seq.push(TagElem::packed(Tag::End(location, key, flags)));
+        }
+
+        item.body = Content::sequence(seq);
+    }
+
+    // Create and visit the enum.
+    let s = grouped.end();
     visit(s, s.store(elem), trunk)
 }
 

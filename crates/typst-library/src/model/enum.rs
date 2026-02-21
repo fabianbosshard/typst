@@ -1,12 +1,18 @@
 use std::str::FromStr;
 
-use smallvec::SmallVec;
+use comemo::Track;
+use smallvec::{SmallVec, smallvec};
 
-use crate::diag::bail;
-use crate::foundations::{Array, Content, Packed, Smart, Styles, cast, elem, scope};
-use crate::introspection::{Locatable, Tagged};
+use crate::diag::{SourceResult, bail, warning};
+use crate::engine::Engine;
+use crate::foundations::{
+    Array, Content, Context, NativeElement, Packed, Reflect, Smart, StyleChain, Styles,
+    Synthesize, cast, elem, scope,
+};
+use crate::introspection::{Counter, Locatable, Tagged};
 use crate::layout::{Alignment, Em, HAlignment, Length, VAlignment};
-use crate::model::{ListItemLike, ListLike, Numbering, NumberingPattern};
+use crate::model::{ListItemLike, ListLike, Numbering, NumberingPattern, Refable};
+use crate::text::TextElem;
 
 /// A numbered list.
 ///
@@ -64,7 +70,7 @@ use crate::model::{ListItemLike, ListLike, Numbering, NumberingPattern};
 /// Enumeration items can contain multiple paragraphs and other block-level
 /// content. All content that is indented more than an item's marker becomes
 /// part of that item.
-#[elem(scope, title = "Numbered List", Locatable, Tagged)]
+#[elem(scope, title = "Numbered List", Locatable, Tagged, Synthesize)]
 pub struct EnumElem {
     /// Defines the default [spacing]($enum.spacing) of the enumeration. If it
     /// is `{false}`, the items are spaced apart with
@@ -201,6 +207,19 @@ pub struct EnumElem {
     /// ) [+ #phase]
     /// ```
     #[variadic]
+    #[parse(
+        for item in args.items.iter() {
+            if item.name.is_none() && Array::castable(&item.value.v) {
+                engine.sink.warn(warning!(
+                    item.value.span,
+                    "implicit conversion from array to `enum.item` is deprecated";
+                    hint: "use `enum.item(number)[body]` instead";
+                    hint: "this conversion was never documented and is being phased out"
+                ));
+            }
+        }
+        args.all()?
+    )]
     pub children: Vec<Packed<EnumItem>>,
 
     /// The numbers of parent items.
@@ -217,7 +236,7 @@ impl EnumElem {
 }
 
 /// An enumeration item.
-#[elem(name = "item", title = "Numbered List Item", Tagged)]
+#[elem(name = "item", title = "Numbered List Item", Locatable, Tagged, Refable)]
 pub struct EnumItem {
     /// The item's number.
     #[positional]
@@ -226,6 +245,21 @@ pub struct EnumItem {
     /// The item's body.
     #[required]
     pub body: Content,
+
+    /// The fully resolved numbering, including all parent numbers.
+    #[internal]
+    #[synthesized]
+    pub resolved: SmallVec<[u64; 4]>,
+
+    /// The numbering style used at the item's location.
+    #[internal]
+    #[synthesized]
+    pub resolved_numbering: Numbering,
+
+    /// Whether references to this item should display full numbering.
+    #[internal]
+    #[synthesized]
+    pub resolved_full: bool,
 }
 
 cast! {
@@ -241,6 +275,72 @@ cast! {
     v: Content => v.unpack::<Self>().unwrap_or_else(Self::new),
 }
 
+/// Format an enum item's already resolved numbering.
+pub fn display_enum_numbering(
+    engine: &mut Engine,
+    styles: StyleChain,
+    numbering: &Numbering,
+    resolved: &[u64],
+    full: bool,
+) -> SourceResult<Content> {
+    let Some(&last) = resolved.last() else {
+        return Ok(Content::empty());
+    };
+
+    // Enum references intentionally use the same untrimmed formatting as enum
+    // markers so both render identically.
+    let context = Context::new(None, Some(styles));
+
+    if full {
+        return Ok(numbering.apply(engine, context.track(), resolved)?.display());
+    }
+
+    Ok(match numbering {
+        Numbering::Pattern(pattern) => {
+            TextElem::packed(pattern.apply_kth(resolved.len() - 1, last))
+        }
+        other => other.apply(engine, context.track(), &[last])?.display(),
+    })
+}
+
+impl Synthesize for Packed<EnumElem> {
+    fn synthesize(&mut self, _: &mut Engine, styles: StyleChain) -> SourceResult<()> {
+        let numbering = self.numbering.get_ref(styles).clone();
+        let full = self.full.get(styles);
+        let reversed = self.reversed.get(styles);
+        let parents = styles.get_cloned(EnumElem::parents);
+
+        let mut number = self
+            .start
+            .get(styles)
+            .unwrap_or_else(|| if reversed { self.children.len() as u64 } else { 1 });
+
+        for item in &mut self.children {
+            number = item.number.get(styles).unwrap_or(number);
+
+            let mut resolved = parents.clone();
+            resolved.push(number);
+
+            let item = item.as_mut();
+            let set_parents = item.resolved.is_none();
+            item.resolved = Some(resolved);
+            item.resolved_numbering = Some(numbering.clone());
+            item.resolved_full = Some(full);
+            if set_parents {
+                item.body = item.body.clone().set(EnumElem::parents, smallvec![number]);
+            }
+
+            number = if reversed {
+                number.saturating_sub(1)
+            } else {
+                number.saturating_add(1)
+            };
+        }
+
+        Ok(())
+    }
+}
+
 impl ListLike for EnumElem {
     type Item = EnumItem;
 
@@ -253,5 +353,37 @@ impl ListItemLike for EnumItem {
     fn styled(mut item: Packed<Self>, styles: Styles) -> Packed<Self> {
         item.body.style_in_place(styles);
         item
+    }
+}
+
+impl Refable for Packed<EnumItem> {
+    fn supplement(&self) -> Content {
+        Content::empty()
+    }
+
+    fn counter(&self) -> Counter {
+        // Enum items format references from their pre-resolved numbering in
+        // `reference_number`. This counter is only used by the fallback path.
+        Counter::of(EnumElem::ELEM)
+    }
+
+    fn numbering(&self) -> Option<&Numbering> {
+        self.resolved_numbering.as_ref()
+    }
+
+    fn reference_number(
+        &self,
+        engine: &mut Engine,
+        styles: StyleChain,
+    ) -> SourceResult<Option<Content>> {
+        let (Some(numbering), Some(resolved), Some(full)) = (
+            self.resolved_numbering.as_ref(),
+            self.resolved.as_ref(),
+            self.resolved_full,
+        ) else {
+            return Ok(None);
+        };
+
+        Ok(Some(display_enum_numbering(engine, styles, numbering, resolved, full)?))
     }
 }

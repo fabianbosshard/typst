@@ -9,6 +9,7 @@ mod lr;
 mod mat;
 mod root;
 mod run;
+mod squish;
 mod stretch;
 mod text;
 mod underover;
@@ -529,6 +530,8 @@ fn layout_realized(
         layout_op(elem, ctx, styles)?
     } else if let Some(elem) = elem.to_packed::<RootElem>() {
         self::root::layout_root(elem, ctx, styles)?
+    } else if let Some(elem) = elem.to_packed::<SquishElem>() {
+        self::squish::layout_squish(elem, ctx, styles)?
     } else if let Some(elem) = elem.to_packed::<StretchElem>() {
         self::stretch::layout_stretch(elem, ctx, styles)?
     } else if let Some(elem) = elem.to_packed::<UnderlineElem>() {

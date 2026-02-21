@@ -173,7 +173,8 @@ fn enum_item(p: &mut Parser) {
     p.with_nl_mode(AtNewline::RequireColumn(p.current_column()), |p| {
         let m = p.marker();
         p.assert(SyntaxKind::EnumMarker);
-        markup(p, true, false, syntax_set!(RightBracket, End));
+        markup(p, true, false, syntax_set!(Label, RightBracket, End));
+        p.eat_if(SyntaxKind::Label);
         p.wrap(m, SyntaxKind::EnumItem);
     });
 }

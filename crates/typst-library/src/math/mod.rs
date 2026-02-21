@@ -9,6 +9,7 @@ mod lr;
 mod matrix;
 mod op;
 mod root;
+mod squish;
 mod style;
 mod underover;
 
@@ -21,6 +22,7 @@ pub use self::lr::*;
 pub use self::matrix::*;
 pub use self::op::*;
 pub use self::root::*;
+pub use self::squish::*;
 pub use self::style::*;
 pub use self::underover::*;
 
@@ -68,6 +70,7 @@ pub fn module() -> Module {
     math.define_elem::<MatElem>();
     math.define_elem::<CasesElem>();
     math.define_elem::<RootElem>();
+    math.define_elem::<SquishElem>();
     math.define_elem::<ClassElem>();
     math.define_elem::<OpElem>();
     math.define_elem::<PrimesElem>();

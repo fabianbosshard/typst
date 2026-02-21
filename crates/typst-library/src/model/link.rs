@@ -241,9 +241,10 @@ impl Destination {
             &Destination::Location(loc) => {
                 let fallback = |engine: &mut Engine| {
                     // Fall back to a generating a page reference.
-                    let numbering = loc.page_numbering(engine).unwrap_or_else(|| {
-                        NumberingPattern::from_str("1").unwrap().into()
-                    });
+                    let numbering =
+                        loc.page_numbering(engine).unwrap_or_else(|| {
+                            NumberingPattern::from_str("1").unwrap().into()
+                        });
                     let page_nr = Counter::new(CounterKey::Page)
                         .display_at_loc(engine, loc, styles, &numbering)?
                         .plain_text();
@@ -261,12 +262,15 @@ impl Destination {
                     let supplement = refable.supplement().plain_text();
 
                     if let Some(numbering) = refable.numbering() {
-                        let numbers = counter.display_at_loc(
-                            engine,
-                            loc,
-                            styles,
-                            &numbering.clone().trimmed(),
-                        )?;
+                        let numbers = match refable.reference_number(engine, styles)? {
+                            Some(content) => content,
+                            None => counter.display_at_loc(
+                                engine,
+                                loc,
+                                styles,
+                                &numbering.clone().trimmed(),
+                            )?,
+                        };
                         return Ok(eco_format!("{supplement} {}", numbers.plain_text()));
                     } else {
                         let page_ref = fallback(engine)?;
