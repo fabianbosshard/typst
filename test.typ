@@ -145,14 +145,14 @@ $
 + now it 
 
 
-@tag works now, great
+@tag works now
 
 
 fdfkj
 
 
 fdsljfdflsdfkjj
-dfddfd dfjdkfjdkfj dfdfds
+dfddfd dfjdkfjdkfj dfdfdsgfkerdfjkdsfjdjfksdjfk
 $
   matr(A) = matr(Q)_1 matr(R)_1 bold(Q)_1
 $
