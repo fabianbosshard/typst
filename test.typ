@@ -157,3 +157,5 @@ $
   matr(A) = matr(Q)_1 matr(R)_1 bold(Q)_1
 $
 
+
+
