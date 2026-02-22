@@ -817,8 +817,10 @@ const PATH_RULE: ShowFn<PathElem> = |elem, _, _| {
 
 const EQUATION_RULE: ShowFn<EquationElem> = |elem, _, styles| {
     if elem.block.get(styles) {
+        let attach_spacing = styles.resolve(ParElem::leading);
         Ok(BlockElem::multi_layouter(elem.clone(), crate::math::layout_equation_block)
             .with_par_attach(true)
+            .with_par_attach_spacing(Smart::Custom(attach_spacing.into()))
             .with_equation(true)
             .with_equation_short_skip(elem.short_skip.get(styles))
             .with_equation_short_skip_margin(elem.short_skip_margin.get(styles))

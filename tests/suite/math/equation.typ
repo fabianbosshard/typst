@@ -337,27 +337,57 @@ B standalone <standalone>
 }
 
 --- issue-3206-equation-attached-spacing ---
-#set page(width: 220pt, margin: 10pt)
+#set page(width: 260pt, margin: 10pt)
 #set par(spacing: 12pt, leading: 4pt)
-#set math.equation(short-skip: 4pt)
+#set math.equation(short-skip: 100pt, short-skip-margin: 0pt)
 
-LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL <tight-before>
+#box(width: 140pt, inset: 0pt)[x] <tight-before>
 $ x = y $ <tight-eq>
-tight after
+tight after <tight-after>
 
-LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL <standalone-before>
+#box(width: 140pt, inset: 0pt)[x] <blank-after-before>
+$ x = y $ <blank-after-eq>
+
+blank-after text <blank-after-after>
+
+#box(width: 140pt, inset: 0pt)[x] <blank-before-before>
+
+$ x = y $ <blank-before-eq>
+blank-before text <blank-before-after>
+
+#box(width: 140pt, inset: 0pt)[x] <standalone-before>
 
 $ x = y $ <standalone-eq>
 
-standalone after
+standalone after <standalone-after>
 
 #context {
   let tight-above = locate(<tight-eq>).position().y - locate(<tight-before>).position().y
+  let blank-after-above =
+    locate(<blank-after-eq>).position().y - locate(<blank-after-before>).position().y
+  let blank-before-above =
+    locate(<blank-before-eq>).position().y - locate(<blank-before-before>).position().y
   let standalone-above = locate(<standalone-eq>).position().y - locate(<standalone-before>).position().y
 
-  // Tight attachment should not collapse the display into line-leading glue.
-  assert(tight-above > 8pt)
-  assert(standalone-above >= tight-above)
+  let tight-below = locate(<tight-after>).position().y - locate(<tight-eq>).position().y
+  let blank-after-below =
+    locate(<blank-after-after>).position().y - locate(<blank-after-eq>).position().y
+  let blank-before-below =
+    locate(<blank-before-after>).position().y - locate(<blank-before-eq>).position().y
+  let standalone-below =
+    locate(<standalone-after>).position().y - locate(<standalone-eq>).position().y
+
+  // no blank before => small above
+  assert.eq(blank-after-above, tight-above)
+  // blank before => big above
+  assert(blank-before-above > tight-above)
+  assert(standalone-above > tight-above)
+
+  // no blank after => small below
+  assert.eq(blank-before-below, tight-below)
+  // blank after => big below
+  assert(blank-after-below > tight-below)
+  assert(standalone-below > tight-below)
 }
 
 --- issue-2438-equation-short-skip ---
@@ -377,8 +407,10 @@ $ x = y $ <long-eq>
   let long-above = locate(<long-eq>).position().y - locate(<long-before>).position().y
   let short-above = locate(<short-eq>).position().y - locate(<short-before>).position().y
 
+  // no blank line => long case uses attached (small) skip
+  assert(long-above <= 8pt)
+  // short case can reduce further (very small skip)
   assert(short-above < long-above)
-  assert(long-above > 8pt)
 }
 
 --- issue-2438-equation-short-skip-lorem ---
