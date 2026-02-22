@@ -48,6 +48,8 @@ pub fn collect<'a>(
         expand,
         output: Vec::with_capacity(children.len()),
         par_situation: ParSituation::First,
+        may_attach: false,
+        pending_equation_below: None,
     }
     .run(mode)
 }
@@ -62,6 +64,14 @@ struct Collector<'a, 'x, 'y> {
     locator: SplitLocator<'a>,
     output: Vec<Child<'a>>,
     par_situation: ParSituation,
+    may_attach: bool,
+    pending_equation_below: Option<PendingEquationBelow>,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct PendingEquationBelow {
+    spacing_index: usize,
+    short: Rel<Abs>,
 }
 
 impl<'a> Collector<'a, '_, '_> {
@@ -75,21 +85,32 @@ impl<'a> Collector<'a, '_, '_> {
 
     /// Perform collection for block-level children.
     fn run_block(mut self) -> SourceResult<Vec<Child<'a>>> {
-        for &(child, styles) in self.children {
+        for (i, &(child, styles)) in self.children.iter().enumerate() {
+            if self.pending_equation_below.is_some()
+                && !child.is::<TagElem>()
+                && !child.is::<ParElem>()
+            {
+                self.pending_equation_below = None;
+            }
+
             if let Some(elem) = child.to_packed::<TagElem>() {
                 self.output.push(Child::Tag(&elem.tag));
             } else if let Some(elem) = child.to_packed::<VElem>() {
                 self.v(elem, styles);
+                self.may_attach = false;
             } else if let Some(elem) = child.to_packed::<ParElem>() {
                 self.par(elem, styles)?;
             } else if let Some(elem) = child.to_packed::<BlockElem>() {
-                self.block(elem, styles);
+                self.block(elem, styles, self.next_non_tag_is_par(i + 1));
             } else if let Some(elem) = child.to_packed::<PlaceElem>() {
                 self.place(elem, styles)?;
+                self.may_attach = false;
             } else if child.is::<FlushElem>() {
                 self.output.push(Child::Flush);
+                self.may_attach = false;
             } else if let Some(elem) = child.to_packed::<ColbreakElem>() {
                 self.output.push(Child::Break(elem.weak.get(styles)));
+                self.may_attach = false;
             } else if child.is::<PagebreakElem>() {
                 bail!(
                     child.span(), "pagebreaks are not allowed inside of containers";
@@ -101,6 +122,7 @@ impl<'a> Collector<'a, '_, '_> {
                     "{} was ignored during paged export",
                     child.func().name()
                 ));
+                self.may_attach = false;
             }
         }
 
@@ -171,6 +193,9 @@ impl<'a> Collector<'a, '_, '_> {
         )?
         .into_frames();
 
+        let first_line_width = lines.first().map(Frame::width).unwrap_or_default();
+        self.resolve_pending_equation_below(first_line_width);
+
         let spacing = elem.spacing.resolve(styles);
         let leading = elem.leading.resolve(styles);
 
@@ -180,6 +205,7 @@ impl<'a> Collector<'a, '_, '_> {
 
         self.output.push(Child::Rel(spacing.into(), 4));
         self.par_situation = ParSituation::Consecutive;
+        self.may_attach = true;
 
         Ok(())
     }
@@ -231,7 +257,12 @@ impl<'a> Collector<'a, '_, '_> {
 
     /// Collect a block into a [`SingleChild`] or [`MultiChild`] depending on
     /// whether it is breakable.
-    fn block(&mut self, elem: &'a Packed<BlockElem>, styles: StyleChain<'a>) {
+    fn block(
+        &mut self,
+        elem: &'a Packed<BlockElem>,
+        styles: StyleChain<'a>,
+        next_is_par: bool,
+    ) {
         let locator = self.locator.next(&elem.span());
         let align = styles.resolve(AlignElem::alignment);
         let alone = self.children.len() == 1;
@@ -243,13 +274,54 @@ impl<'a> Collector<'a, '_, '_> {
         };
 
         let fallback = LazyCell::new(|| styles.resolve(ParElem::spacing));
-        let spacing = |amount| match amount {
-            Smart::Auto => Child::Rel((*fallback).into(), 4),
-            Smart::Custom(Spacing::Rel(rel)) => Child::Rel(rel.resolve(styles), 3),
-            Smart::Custom(Spacing::Fr(fr)) => Child::Fr(fr),
+        let leading = styles.resolve(ParElem::leading);
+        let attachable = elem.par_attach.get(styles);
+        let attach_prev =
+            attachable && !elem.par_break_before.get(styles) && self.may_attach;
+        let attach_next = attachable && !elem.par_break_after.get(styles) && next_is_par;
+        let attach_spacing = elem.par_attach_spacing.get(styles);
+
+        enum PreparedSpacing {
+            Rel(Rel<Abs>, u8),
+            Fr(Fr),
+        }
+
+        let resolve_spacing = |amount, auto_weakness, custom_weakness| match amount {
+            Smart::Auto => PreparedSpacing::Rel((*fallback).into(), auto_weakness),
+            Smart::Custom(Spacing::Rel(rel)) => {
+                PreparedSpacing::Rel(rel.resolve(styles), custom_weakness)
+            }
+            Smart::Custom(Spacing::Fr(fr)) => PreparedSpacing::Fr(fr),
         };
 
-        self.output.push(spacing(elem.above.get(styles)));
+        let attached_side_spacing = |side| match attach_spacing {
+            Smart::Auto => side,
+            Smart::Custom(spacing) => Smart::Custom(spacing),
+        };
+
+        let mut above = if attach_prev {
+            resolve_spacing(attached_side_spacing(elem.above.get(styles)), 1, 1)
+        } else {
+            resolve_spacing(elem.above.get(styles), 4, 3)
+        };
+
+        if elem.equation.get(styles)
+            && attach_prev
+            && self
+                .last_paragraph_line_width()
+                .is_some_and(|line_width| self.is_short_display_line(line_width))
+            && let PreparedSpacing::Rel(amount, weakness) = &mut above
+        {
+            *amount = amount.relative_to(self.base.y).min(leading).into();
+            *weakness = (*weakness).min(1);
+        }
+
+        match above {
+            PreparedSpacing::Rel(amount, weakness) => {
+                self.output.push(Child::Rel(amount.into(), weakness));
+            }
+            PreparedSpacing::Fr(fr) => self.output.push(Child::Fr(fr)),
+        }
 
         if !breakable || fr.is_some() {
             self.output.push(Child::Single(self.boxed(SingleChild {
@@ -274,8 +346,100 @@ impl<'a> Collector<'a, '_, '_> {
             })));
         };
 
-        self.output.push(spacing(elem.below.get(styles)));
-        self.par_situation = ParSituation::Other;
+        let mut below = if attach_next {
+            resolve_spacing(attached_side_spacing(elem.below.get(styles)), 1, 1)
+        } else {
+            resolve_spacing(elem.below.get(styles), 4, 3)
+        };
+
+        let spacing_index = self.output.len();
+        if elem.equation.get(styles)
+            && attach_next
+            && let PreparedSpacing::Rel(amount, weakness) = &mut below
+        {
+            *weakness = (*weakness).min(1);
+            let resolved = amount.relative_to(self.base.y);
+            let short = resolved.min(leading);
+            if short < resolved {
+                self.pending_equation_below =
+                    Some(PendingEquationBelow { spacing_index, short: short.into() });
+            }
+        }
+
+        match below {
+            PreparedSpacing::Rel(amount, weakness) => {
+                self.output.push(Child::Rel(amount.into(), weakness));
+            }
+            PreparedSpacing::Fr(fr) => self.output.push(Child::Fr(fr)),
+        }
+
+        self.par_situation = if attach_next {
+            ParSituation::Interrupted
+        } else if next_is_par
+            && attachable
+            && (attach_prev
+                || elem.par_break_before.get(styles)
+                || elem.par_break_after.get(styles))
+        {
+            ParSituation::Consecutive
+        } else {
+            ParSituation::Other
+        };
+        self.may_attach = false;
+    }
+
+    /// Whether the next non-tag element is a paragraph.
+    fn next_non_tag_is_par(&self, mut index: usize) -> bool {
+        while let Some((child, _)) = self.children.get(index) {
+            if child.is::<TagElem>() {
+                index += 1;
+                continue;
+            }
+
+            return child.is::<ParElem>();
+        }
+
+        false
+    }
+
+    /// Potentially reduces pending below-equation spacing to short display
+    /// spacing if the first line below the equation is short.
+    fn resolve_pending_equation_below(&mut self, first_line_width: Abs) {
+        let Some(pending) = self.pending_equation_below.take() else {
+            return;
+        };
+
+        if !self.is_short_display_line(first_line_width) {
+            return;
+        }
+
+        if let Some(Child::Rel(amount, weakness)) =
+            self.output.get_mut(pending.spacing_index)
+        {
+            *amount = pending.short;
+            *weakness = (*weakness).min(1);
+        }
+    }
+
+    /// The width of the latest emitted paragraph line, if the previous emitted
+    /// semantic item is a line.
+    fn last_paragraph_line_width(&self) -> Option<Abs> {
+        for child in self.output.iter().rev() {
+            match child {
+                Child::Tag(_) | Child::Rel(..) | Child::Fr(_) => {}
+                Child::Line(line) => return Some(line.frame.width()),
+                _ => return None,
+            }
+        }
+
+        None
+    }
+
+    /// Whether a paragraph line should use short display skips around attached
+    /// equations.
+    fn is_short_display_line(&self, line_width: Abs) -> bool {
+        const SHORT_DISPLAY_THRESHOLD: Ratio = Ratio::new(0.7);
+        line_width <= SHORT_DISPLAY_THRESHOLD.of(self.base.x)
     }
 
     /// Collects a placed element into a [`PlacedChild`].

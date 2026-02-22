@@ -123,40 +123,34 @@ const EMPH_RULE: ShowFn<EmphElem> =
 
 const LIST_RULE: ShowFn<ListElem> = |elem, _, styles| {
     let tight = elem.tight.get(styles);
-
-    let mut realized = BlockElem::multi_layouter(elem.clone(), crate::lists::layout_list)
-        .pack()
-        .spanned(elem.span());
+    let mut block = BlockElem::multi_layouter(elem.clone(), crate::lists::layout_list)
+        .with_par_attach(tight);
 
     if tight {
         let spacing = elem
             .spacing
             .get(styles)
             .unwrap_or_else(|| styles.get(ParElem::leading));
-        let v = VElem::new(spacing.into()).with_weak(true).with_attach(true).pack();
-        realized = v + realized;
+        block = block.with_par_attach_spacing(Smart::Custom(spacing.into()));
     }
 
-    Ok(realized)
+    Ok(block.pack().spanned(elem.span()))
 };
 
 const ENUM_RULE: ShowFn<EnumElem> = |elem, _, styles| {
     let tight = elem.tight.get(styles);
-
-    let mut realized = BlockElem::multi_layouter(elem.clone(), crate::lists::layout_enum)
-        .pack()
-        .spanned(elem.span());
+    let mut block = BlockElem::multi_layouter(elem.clone(), crate::lists::layout_enum)
+        .with_par_attach(tight);
 
     if tight {
         let spacing = elem
             .spacing
             .get(styles)
             .unwrap_or_else(|| styles.get(ParElem::leading));
-        let v = VElem::new(spacing.into()).with_weak(true).with_attach(true).pack();
-        realized = v + realized;
+        block = block.with_par_attach_spacing(Smart::Custom(spacing.into()));
     }
 
-    Ok(realized)
+    Ok(block.pack().spanned(elem.span()))
 };
 
 const TERMS_RULE: ShowFn<TermsElem> = |elem, _, styles| {
@@ -824,6 +818,8 @@ const PATH_RULE: ShowFn<PathElem> = |elem, _, _| {
 const EQUATION_RULE: ShowFn<EquationElem> = |elem, _, styles| {
     if elem.block.get(styles) {
         Ok(BlockElem::multi_layouter(elem.clone(), crate::math::layout_equation_block)
+            .with_par_attach(true)
+            .with_equation(true)
             .pack())
     } else {
         Ok(InlineElem::layouter(elem.clone(), crate::math::layout_equation_inline).pack())

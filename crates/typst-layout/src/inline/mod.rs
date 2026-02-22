@@ -202,6 +202,7 @@ fn configuration(
                     Some(ParSituation::First) => all && !in_list(shared),
                     Some(ParSituation::Consecutive) => true,
                     Some(ParSituation::Other) => all,
+                    Some(ParSituation::Interrupted) => false,
                     None => false,
                 }
                 && shared.resolve(AlignElem::alignment).x == dir.start().into()
@@ -251,6 +252,8 @@ pub enum ParSituation {
     Consecutive,
     /// Any other kind of paragraph.
     Other,
+    /// The paragraph continues after an attached block.
+    Interrupted,
 }
 
 /// Raw values from a `ParElem` or style chain. Used to initialize a [`Config`].

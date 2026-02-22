@@ -23,7 +23,7 @@ use typst_library::introspection::{
     Locatable, Location, LocationKey, SplitLocator, Tag, TagElem, TagFlags, Tagged,
 };
 use typst_library::layout::{
-    AlignElem, BoxElem, HElem, InlineElem, PageElem, PagebreakElem, VElem,
+    AlignElem, BlockElem, BoxElem, HElem, InlineElem, PageElem, PagebreakElem, VElem,
 };
 use typst_library::math::{EquationElem, Mathy};
 use typst_library::model::{
@@ -62,6 +62,7 @@ pub fn realize<'a>(
         outside: kind.is_document(),
         may_attach: false,
         saw_parbreak: false,
+        last_was_parbreak: false,
         kind,
     };
 
@@ -103,6 +104,8 @@ struct State<'a, 'x, 'y, 'z> {
     may_attach: bool,
     /// Whether we visited any paragraph breaks.
     saw_parbreak: bool,
+    /// Whether the latest visited meaningful element was a paragraph break.
+    last_was_parbreak: bool,
 }
 
 /// Defines a rule for how certain elements shall be grouped during realization.
@@ -278,6 +281,7 @@ fn visit<'a>(
     // No further transformations to apply, so we can finally just push it to
     // the output!
     s.sink.push((content, styles));
+    s.last_was_parbreak = false;
 
     Ok(())
 }
@@ -687,6 +691,7 @@ fn visit_grouping_rules<'a>(
             && ((active.rule.trigger)(content, s) || (active.rule.inner)(content))
         {
             s.sink.push((content, styles));
+            s.last_was_parbreak = false;
             return Ok(true);
         }
 
@@ -708,6 +713,7 @@ fn visit_grouping_rules<'a>(
         let start = s.sink.len();
         s.groupings.push(Grouping { start, rule, interrupted: false });
         s.sink.push((content, styles));
+        s.last_was_parbreak = false;
         return Ok(true);
     }
 
@@ -734,6 +740,8 @@ fn visit_filter_rules<'a>(
         // need to store them.
         s.may_attach = false;
         s.saw_parbreak = true;
+        s.last_was_parbreak = true;
+        mark_attachable_block_parbreak_after(s);
         return Ok(true);
     } else if !s.may_attach
         && content
@@ -744,10 +752,55 @@ fn visit_filter_rules<'a>(
         return Ok(true);
     }
 
+    if content
+        .to_packed::<BlockElem>()
+        .is_some_and(|elem| elem.par_attach.get(styles))
+    {
+        let mut block = content.clone();
+        if let Some(elem) = block.to_packed_mut::<BlockElem>() {
+            elem.par_break_before.set(s.last_was_parbreak);
+        }
+
+        s.sink.push((s.store(block), styles));
+        s.may_attach = false;
+        s.last_was_parbreak = false;
+        return Ok(true);
+    }
+
     // Remember whether following attach spacing can survive.
     s.may_attach = content.is::<ParElem>();
 
     Ok(false)
+}
+
+/// Marks the latest attachable block in the sink as being followed by a
+/// paragraph break.
+fn mark_attachable_block_parbreak_after(s: &mut State) {
+    let mut i = s.sink.len();
+    while i > 0 {
+        i -= 1;
+        let (content, styles) = s.sink[i];
+
+        if content.is::<TagElem>() {
+            continue;
+        }
+
+        let Some(block) = content.to_packed::<BlockElem>() else {
+            return;
+        };
+
+        if !block.par_attach.get(styles) {
+            return;
+        }
+
+        let mut updated = content.clone();
+        if let Some(elem) = updated.to_packed_mut::<BlockElem>() {
+            elem.par_break_after.set(true);
+        }
+
+        s.sink[i].0 = s.store(updated);
+        return;
+    }
 }
 
 /// Finishes all grouping.

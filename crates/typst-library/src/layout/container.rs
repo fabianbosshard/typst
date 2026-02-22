@@ -364,6 +364,31 @@ pub struct BlockElem {
     #[default(false)]
     pub sticky: bool,
 
+    /// Whether this block can attach to surrounding paragraphs.
+    #[internal]
+    #[parse(Some(false))]
+    pub par_attach: bool,
+
+    /// Whether there was an explicit paragraph break before this block.
+    #[internal]
+    #[parse(Some(false))]
+    pub par_break_before: bool,
+
+    /// Whether there was an explicit paragraph break after this block.
+    #[internal]
+    #[parse(Some(false))]
+    pub par_break_after: bool,
+
+    /// The spacing to use when this block attaches to a paragraph side.
+    #[internal]
+    #[parse(Some(Smart::Auto))]
+    pub par_attach_spacing: Smart<Spacing>,
+
+    /// Whether this block came from a block-level equation.
+    #[internal]
+    #[parse(Some(false))]
+    pub equation: bool,
+
     /// The contents of the block.
     #[positional]
     pub body: Option<BlockBody>,
