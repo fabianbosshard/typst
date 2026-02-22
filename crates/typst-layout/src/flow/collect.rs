@@ -49,6 +49,7 @@ pub fn collect<'a>(
         output: Vec::with_capacity(children.len()),
         par_situation: ParSituation::First,
         may_attach: false,
+        last_paragraph_line_width: None,
         pending_equation_below: None,
     }
     .run(mode)
@@ -65,6 +66,7 @@ struct Collector<'a, 'x, 'y> {
     output: Vec<Child<'a>>,
     par_situation: ParSituation,
     may_attach: bool,
+    last_paragraph_line_width: Option<Abs>,
     pending_equation_below: Option<PendingEquationBelow>,
 }
 
@@ -182,7 +184,7 @@ impl<'a> Collector<'a, '_, '_> {
         elem: &'a Packed<ParElem>,
         styles: StyleChain<'a>,
     ) -> SourceResult<()> {
-        let lines = crate::inline::layout_par(
+        let layout = crate::inline::layout_par(
             elem,
             self.engine,
             self.locator.next(&elem.span()),
@@ -190,11 +192,10 @@ impl<'a> Collector<'a, '_, '_> {
             self.base,
             self.expand,
             self.par_situation,
-        )?
-        .into_frames();
-
-        let first_line_width = lines.first().map(Frame::width).unwrap_or_default();
-        self.resolve_pending_equation_below(first_line_width);
+        )?;
+        self.resolve_pending_equation_below(layout.first_line_width.unwrap_or_default());
+        self.last_paragraph_line_width = layout.last_line_width;
+        let lines = layout.fragment.into_frames();
 
         let spacing = elem.spacing.resolve(styles);
         let leading = elem.leading.resolve(styles);
@@ -299,6 +300,12 @@ impl<'a> Collector<'a, '_, '_> {
             Smart::Custom(spacing) => Smart::Custom(spacing),
         };
 
+        let equation_short_skip = || match elem.equation_short_skip.get(styles) {
+            Smart::Auto => leading / 2.0,
+            Smart::Custom(Spacing::Rel(rel)) => rel.resolve(styles).relative_to(self.base.y),
+            Smart::Custom(Spacing::Fr(_)) => leading / 2.0,
+        };
+
         let mut above = if attach_prev {
             resolve_spacing(attached_side_spacing(elem.above.get(styles)), 1, 1)
         } else {
@@ -312,7 +319,10 @@ impl<'a> Collector<'a, '_, '_> {
                 .is_some_and(|line_width| self.is_short_display_line(line_width))
             && let PreparedSpacing::Rel(amount, weakness) = &mut above
         {
-            *amount = amount.relative_to(self.base.y).min(leading).into();
+            *amount = amount
+                .relative_to(self.base.y)
+                .min(equation_short_skip())
+                .into();
             *weakness = (*weakness).min(1);
         }
 
@@ -359,7 +369,7 @@ impl<'a> Collector<'a, '_, '_> {
         {
             *weakness = (*weakness).min(1);
             let resolved = amount.relative_to(self.base.y);
-            let short = resolved.min(leading);
+            let short = resolved.min(equation_short_skip());
             if short < resolved {
                 self.pending_equation_below =
                     Some(PendingEquationBelow { spacing_index, short: short.into() });
@@ -424,15 +434,7 @@ impl<'a> Collector<'a, '_, '_> {
     /// The width of the latest emitted paragraph line, if the previous emitted
     /// semantic item is a line.
     fn last_paragraph_line_width(&self) -> Option<Abs> {
-        for child in self.output.iter().rev() {
-            match child {
-                Child::Tag(_) | Child::Rel(..) | Child::Fr(_) => {}
-                Child::Line(line) => return Some(line.frame.width()),
-                _ => return None,
-            }
-        }
-
-        None
+        self.last_paragraph_line_width
     }
 
     /// Whether a paragraph line should use short display skips around attached

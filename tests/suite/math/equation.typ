@@ -304,3 +304,77 @@ Looks at the @quadratic formula.
 #set text(stroke: green + 0.5pt)
 
 A $B^2$ $ grave(C)' $
+
+--- issue-3206-equation-directional-attachment ---
+#set page(width: 220pt, margin: 10pt)
+#set par(first-line-indent: 10pt, spacing: 8pt, leading: 4pt)
+
+A tight $ x = y $ B <tight>
+
+A tail $ x = y $
+
+B tail <tail>
+
+A head
+
+$ x = y $ B head <head>
+
+A standalone
+
+$ x = y $
+
+B standalone <standalone>
+
+#context {
+  let x-tight = locate(<tight>).position().x
+  let x-tail = locate(<tail>).position().x
+  let x-head = locate(<head>).position().x
+  let x-standalone = locate(<standalone>).position().x
+
+  assert.eq(x-head, x-tight)
+  assert(x-tail > x-tight)
+  assert(x-standalone > x-tight)
+}
+
+--- issue-3206-equation-attached-spacing ---
+#set page(width: 220pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+// Disable additional short-skip reduction so we only test tight attachment.
+#set math.equation(short-skip: 100pt)
+
+LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL <tight-before>
+$ x = y $ <tight-eq>
+tight after
+
+LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL <standalone-before>
+
+$ x = y $ <standalone-eq>
+
+standalone after
+
+#context {
+  let tight-above = locate(<tight-eq>).position().y - locate(<tight-before>).position().y
+  let standalone-above = locate(<standalone-eq>).position().y - locate(<standalone-before>).position().y
+
+  assert(tight-above < standalone-above)
+}
+
+--- issue-2438-equation-short-skip ---
+#set page(width: 220pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+#set math.equation(short-skip: 1pt)
+
+LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL <long-before>
+$ x = y $ <long-eq>
+after long
+
+S <short-before>
+$ x = y $ <short-eq>
+after short
+
+#context {
+  let long-above = locate(<long-eq>).position().y - locate(<long-before>).position().y
+  let short-above = locate(<short-eq>).position().y - locate(<short-before>).position().y
+
+  assert(short-above < long-above)
+}

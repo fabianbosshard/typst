@@ -389,6 +389,11 @@ pub struct BlockElem {
     #[parse(Some(false))]
     pub equation: bool,
 
+    /// The spacing used for short display skips around equations.
+    #[internal]
+    #[parse(Some(Smart::Auto))]
+    pub equation_short_skip: Smart<Spacing>,
+
     /// The contents of the block.
     #[positional]
     pub body: Option<BlockBody>,

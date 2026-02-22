@@ -40,6 +40,17 @@ use self::shaping::{
 /// Range of a substring of text.
 type Range = std::ops::Range<usize>;
 
+/// The result of laying out a paragraph.
+#[derive(Debug, Clone)]
+pub struct ParLayout {
+    /// The resulting laid out frames.
+    pub fragment: Fragment,
+    /// The width of the first line's content.
+    pub first_line_width: Option<Abs>,
+    /// The width of the last line's content.
+    pub last_line_width: Option<Abs>,
+}
+
 /// Layouts the paragraph.
 pub fn layout_par(
     elem: &Packed<ParElem>,
@@ -49,7 +60,7 @@ pub fn layout_par(
     region: Size,
     expand: bool,
     situation: ParSituation,
-) -> SourceResult<Fragment> {
+) -> SourceResult<ParLayout> {
     layout_par_impl(
         elem,
         engine.routines,
@@ -82,7 +93,7 @@ fn layout_par_impl(
     region: Size,
     expand: bool,
     situation: ParSituation,
-) -> SourceResult<Fragment> {
+) -> SourceResult<ParLayout> {
     let link = LocatorLink::new(locator);
     let mut locator = Locator::link(&link).split();
     let mut engine = Engine {
@@ -145,6 +156,7 @@ pub fn layout_inline<'a>(
             hanging_indent: shared.resolve(ParElem::hanging_indent),
         },
     )
+    .map(|layout| layout.fragment)
 }
 
 /// The internal implementation of [`layout_inline`].
@@ -158,7 +170,7 @@ fn layout_inline_impl<'a>(
     expand: bool,
     par: Option<ParSituation>,
     base: &ConfigBase,
-) -> SourceResult<Fragment> {
+) -> SourceResult<ParLayout> {
     // Prepare configuration that is shared across the whole inline layout.
     let config = configuration(base, children, shared, par);
 
@@ -171,9 +183,13 @@ fn layout_inline_impl<'a>(
 
     // Break the text into lines.
     let lines = linebreak(engine, &p, region.x - config.hanging_indent);
+    let first_line_width = lines.first().map(|line| line.width);
+    let last_line_width = lines.last().map(|line| line.width);
 
     // Turn the selected lines into frames.
-    finalize(engine, &p, &lines, region, expand, locator)
+    let fragment = finalize(engine, &p, &lines, region, expand, locator)?;
+
+    Ok(ParLayout { fragment, first_line_width, last_line_width })
 }
 
 /// Determine the inline layout's configuration.

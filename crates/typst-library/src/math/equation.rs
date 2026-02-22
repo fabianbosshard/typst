@@ -12,7 +12,7 @@ use crate::foundations::{
 };
 use crate::introspection::{Count, Counter, CounterUpdate, Locatable, Tagged};
 use crate::layout::{
-    AlignElem, Alignment, BlockElem, OuterHAlignment, SpecificAlignment, VAlignment,
+    AlignElem, Alignment, BlockElem, OuterHAlignment, Spacing, SpecificAlignment, VAlignment,
 };
 use crate::math::MathSize;
 use crate::model::{Numbering, Outlinable, ParLine, Refable, Supplement};
@@ -51,6 +51,14 @@ pub struct EquationElem {
     /// Whether the equation is displayed as a separate block.
     #[default(false)]
     pub block: bool,
+
+    /// The reduced spacing used for short display skips.
+    ///
+    /// This spacing is used when a block equation is tightly attached to a
+    /// paragraph and the adjacent line is short enough to allow additional
+    /// vertical tightening.
+    #[default(Smart::Auto)]
+    pub short_skip: Smart<Spacing>,
 
     /// How to number block-level equations. Accepts a
     /// [numbering pattern or function]($numbering) taking a single number.
