@@ -28,8 +28,8 @@ use typst_utils::{Numeric, SliceExt};
 
 use self::collect::{Item, Segment, SpanMapper, collect};
 use self::deco::decorate;
-use self::finalize::finalize;
-use self::line::{Line, apply_shift, commit, line};
+use self::finalize::{finalize, frame_width};
+use self::line::{Line, apply_shift, commit, line, right_edge};
 use self::linebreak::{Breakpoint, linebreak};
 use self::prepare::{Preparation, prepare};
 use self::shaping::{
@@ -45,8 +45,8 @@ type Range = std::ops::Range<usize>;
 pub struct ParLayout {
     /// The resulting laid out frames.
     pub fragment: Fragment,
-    /// The width of the last line's content.
-    pub last_line_width: Option<Abs>,
+    /// The right edge of the last line in paragraph coordinates.
+    pub last_line_right: Option<Abs>,
 }
 
 /// Layouts the paragraph.
@@ -181,12 +181,13 @@ fn layout_inline_impl<'a>(
 
     // Break the text into lines.
     let lines = linebreak(engine, &p, region.x - config.hanging_indent);
-    let last_line_width = lines.last().map(|line| line.width);
+    let width = frame_width(&p, &lines, region, expand);
+    let last_line_right = lines.last().map(|line| right_edge(&p, line, width));
 
     // Turn the selected lines into frames.
     let fragment = finalize(engine, &p, &lines, region, expand, locator)?;
 
-    Ok(ParLayout { fragment, last_line_width })
+    Ok(ParLayout { fragment, last_line_right })
 }
 
 /// Determine the inline layout's configuration.

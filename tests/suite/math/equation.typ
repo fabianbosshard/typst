@@ -401,17 +401,60 @@ $ E = m c^2 $ <e8>
 #set par(spacing: 12pt, leading: 4pt)
 
 // With default short-skip margin, this should still count as short.
-#box(width: 60pt, inset: 0pt)[x] <cutoff-short-before>
+#box(width: 80pt, inset: 0pt)[x] <cutoff-short-before>
 $ E = m c^2 $ <cutoff-short-eq>
 
 // This should be long enough to use normal above spacing.
-#box(width: 80pt, inset: 0pt)[x] <cutoff-long-before>
+#box(width: 100pt, inset: 0pt)[x] <cutoff-long-before>
 $ E = m c^2 $ <cutoff-long-eq>
 
 #context {
   let short-above = locate(<cutoff-short-eq>).position().y - locate(<cutoff-short-before>).position().y
   let long-above = locate(<cutoff-long-eq>).position().y - locate(<cutoff-long-before>).position().y
   assert(short-above < long-above)
+}
+
+--- issue-2438-equation-short-skip-line-offset ---
+#set page(width: 260pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+#set math.equation(short-skip: 1pt, short-skip-margin: 0pt)
+#show math.equation: set align(center)
+
+#set align(left)
+#box(width: 70pt, inset: 0pt)[x] <offset-left-before>
+$ E = m c^2 $ <offset-left-eq>
+
+#set align(center)
+#box(width: 70pt, inset: 0pt)[x] <offset-center-before>
+$ E = m c^2 $ <offset-center-eq>
+
+#context {
+  let gap-left = locate(<offset-left-eq>).position().y - locate(<offset-left-before>).position().y
+  let gap-center = locate(<offset-center-eq>).position().y - locate(<offset-center-before>).position().y
+  assert(gap-left < gap-center)
+}
+
+--- issue-2438-equation-short-skip-first-line-indent ---
+#set page(width: 260pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt, first-line-indent: 40pt)
+#set math.equation(short-skip: 1pt, short-skip-margin: 0pt)
+#show math.equation: set align(center)
+
+Seed.
+
+#box(width: 70pt, inset: 0pt)[x] <indent-before>
+$ E = m c^2 $ <indent-eq>
+
+#set par(first-line-indent: 0pt)
+Seed.
+
+#box(width: 70pt, inset: 0pt)[x] <no-indent-before>
+$ E = m c^2 $ <no-indent-eq>
+
+#context {
+  let gap-indent = locate(<indent-eq>).position().y - locate(<indent-before>).position().y
+  let gap-no-indent = locate(<no-indent-eq>).position().y - locate(<no-indent-before>).position().y
+  assert(gap-indent > gap-no-indent)
 }
 
 --- issue-2438-equation-short-skip-alignment ---

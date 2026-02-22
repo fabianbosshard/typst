@@ -14,8 +14,9 @@ use typst_library::introspection::{
 };
 use typst_library::layout::{
     Abs, AlignElem, Alignment, Axes, BlockElem, ColbreakElem, FixedAlignment, FlushElem,
-    Fr, Fragment, Frame, FrameParent, Inherit, PagebreakElem, PlaceElem, PlacementScope,
-    Ratio, Region, Regions, Rel, Size, Sizing, Spacing, VElem,
+    Fr, Fragment, Frame, FrameItem, FrameParent, Inherit, PagebreakElem, PlaceElem,
+    PlacementScope, Point, Ratio, Rect, Region, Regions, Rel, Size, Sizing, Spacing,
+    VElem,
 };
 use typst_library::model::ParElem;
 use typst_library::routines::{Pair, Routines};
@@ -49,7 +50,7 @@ pub fn collect<'a>(
         output: Vec::with_capacity(children.len()),
         par_situation: ParSituation::First,
         may_attach: false,
-        last_paragraph_line_width: None,
+        last_paragraph_line_right: None,
     }
     .run(mode)
 }
@@ -65,7 +66,7 @@ struct Collector<'a, 'x, 'y> {
     output: Vec<Child<'a>>,
     par_situation: ParSituation,
     may_attach: bool,
-    last_paragraph_line_width: Option<Abs>,
+    last_paragraph_line_right: Option<Abs>,
 }
 
 impl<'a> Collector<'a, '_, '_> {
@@ -178,7 +179,7 @@ impl<'a> Collector<'a, '_, '_> {
             self.expand,
             self.par_situation,
         )?;
-        self.last_paragraph_line_width = layout.last_line_width;
+        self.last_paragraph_line_right = layout.last_line_right;
         let lines = layout.fragment.into_frames();
 
         let spacing = elem.spacing.resolve(styles);
@@ -307,8 +308,8 @@ impl<'a> Collector<'a, '_, '_> {
 
         if elem.equation.get(styles)
             && attach_prev
-            && let Some(prev_width) = self.last_paragraph_line_width()
-            && prev_width
+            && let Some(prev_right) = self.last_paragraph_line_right()
+            && prev_right
                 <= self.equation_left_edge(
                     elem,
                     styles,
@@ -397,10 +398,10 @@ impl<'a> Collector<'a, '_, '_> {
         false
     }
 
-    /// The width of the latest emitted paragraph line, if the previous emitted
-    /// semantic item is a line.
-    fn last_paragraph_line_width(&self) -> Option<Abs> {
-        self.last_paragraph_line_width
+    /// The right edge of the latest emitted paragraph line, if the previous
+    /// emitted semantic item is a line.
+    fn last_paragraph_line_right(&self) -> Option<Abs> {
+        self.last_paragraph_line_right
     }
 
     /// Computes the x-coordinate of a block equation's left edge after
@@ -414,19 +415,22 @@ impl<'a> Collector<'a, '_, '_> {
         fr: Option<Fr>,
         locator: Locator,
     ) -> SourceResult<Abs> {
-        let width = self.measure_block_width(elem, styles, breakable, fr, locator)?;
-        Ok(align.x.position(self.base.x - width))
+        let (x_min, x_max) =
+            self.measure_block_x_bounds(elem, styles, breakable, fr, locator)?;
+        let ink_width = (x_max - x_min).max(Abs::zero());
+        Ok(align.x.position(self.base.x - ink_width) + x_min)
     }
 
-    /// Measures a block's laid out width in the flow's base region.
-    fn measure_block_width(
+    /// Measures a block's laid out horizontal ink bounds in the flow's base
+    /// region.
+    fn measure_block_x_bounds(
         &mut self,
         elem: &Packed<BlockElem>,
         styles: StyleChain,
         breakable: bool,
         fr: Option<Fr>,
         locator: Locator,
-    ) -> SourceResult<Abs> {
+    ) -> SourceResult<(Abs, Abs)> {
         let region = Region::new(self.base, Axes::new(self.expand, false));
 
         if !breakable || fr.is_some() {
@@ -442,7 +446,12 @@ impl<'a> Collector<'a, '_, '_> {
                 styles,
                 region,
             )
-            .map(|frame| frame.width());
+            .map(|frame| {
+                Self::frame_ink_bounds(&frame)
+                    .map_or((Abs::zero(), frame.width()), |bounds| {
+                        (bounds.min.x, bounds.max.x)
+                    })
+            });
         }
 
         layout_multi_impl(
@@ -457,7 +466,68 @@ impl<'a> Collector<'a, '_, '_> {
             styles,
             region.into(),
         )
-        .map(|fragment| fragment.iter().next().map(Frame::width).unwrap_or_default())
+        .map(|fragment| {
+            fragment.iter().next().map_or((Abs::zero(), Abs::zero()), |frame| {
+                Self::frame_ink_bounds(frame)
+                    .map_or((Abs::zero(), frame.width()), |bounds| {
+                        (bounds.min.x, bounds.max.x)
+                    })
+            })
+        })
+    }
+
+    /// Computes the union of all visible ink bounds in the frame.
+    fn frame_ink_bounds(frame: &Frame) -> Option<Rect> {
+        let mut min = Point::splat(Abs::inf());
+        let mut max = Point::splat(-Abs::inf());
+        let mut has_visible = false;
+
+        for (pos, item) in frame.items() {
+            let Some(mut bounds) = Self::item_ink_bounds(item) else {
+                continue;
+            };
+
+            bounds.min += *pos;
+            bounds.max += *pos;
+            min = min.min(bounds.min);
+            max = max.max(bounds.max);
+            has_visible = true;
+        }
+
+        has_visible.then(|| Rect::new(min, max))
+    }
+
+    /// Computes the ink bounds of a frame item in its local coordinate system.
+    fn item_ink_bounds(item: &FrameItem) -> Option<Rect> {
+        match item {
+            FrameItem::Group(group) => {
+                let mut bounds = Self::frame_ink_bounds(&group.frame)?;
+                if !group.transform.is_identity() {
+                    let corners = [
+                        bounds.min,
+                        Point::new(bounds.min.x, bounds.max.y),
+                        Point::new(bounds.max.x, bounds.min.y),
+                        bounds.max,
+                    ];
+
+                    let mut min = Point::splat(Abs::inf());
+                    let mut max = Point::splat(-Abs::inf());
+                    for point in corners {
+                        let transformed = point.transform(group.transform);
+                        min = min.min(transformed);
+                        max = max.max(transformed);
+                    }
+                    bounds = Rect::new(min, max);
+                }
+                Some(bounds)
+            }
+            FrameItem::Text(text) => Some(text.bbox()),
+            FrameItem::Shape(shape, _) => Some(shape.geometry.bbox()),
+            FrameItem::Image(_, size, _) => {
+                Some(Rect::from_pos_size(Point::zero(), *size))
+            }
+            FrameItem::Link(..) | FrameItem::Tag(..) => None,
+        }
     }
 
     /// Collects a placed element into a [`PlacedChild`].

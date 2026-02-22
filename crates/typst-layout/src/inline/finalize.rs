@@ -13,18 +13,7 @@ pub fn finalize(
     expand: bool,
     locator: &mut SplitLocator<'_>,
 ) -> SourceResult<Fragment> {
-    // Determine the resulting width: Full width of the region if we should
-    // expand or there's fractional spacing, fit-to-width otherwise.
-    let width = if !region.x.is_finite()
-        || (!expand && lines.iter().all(|line| line.fr().is_zero()))
-    {
-        region.x.min(
-            p.config.hanging_indent
-                + lines.iter().map(|line| line.width).max().unwrap_or_default(),
-        )
-    } else {
-        region.x
-    };
+    let width = frame_width(p, lines, region, expand);
 
     // Stack the lines into one frame per region.
     lines
@@ -32,4 +21,19 @@ pub fn finalize(
         .map(|line| commit(engine, p, line, width, region.y, locator))
         .collect::<SourceResult<_>>()
         .map(Fragment::frames)
+}
+
+/// Determine the width of each produced line frame.
+pub fn frame_width(p: &Preparation, lines: &[Line], region: Size, expand: bool) -> Abs {
+    // Determine the resulting width: Full width of the region if we should
+    // expand or there's fractional spacing, fit-to-width otherwise.
+    if !region.x.is_finite() || (!expand && lines.iter().all(|line| line.fr().is_zero()))
+    {
+        region.x.min(
+            p.config.hanging_indent
+                + lines.iter().map(|line| line.width).max().unwrap_or_default(),
+        )
+    } else {
+        region.x
+    }
 }

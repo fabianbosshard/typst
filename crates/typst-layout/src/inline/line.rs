@@ -488,48 +488,15 @@ pub fn commit(
     full: Abs,
     locator: &mut SplitLocator<'_>,
 ) -> SourceResult<Frame> {
-    let mut remaining = width - line.width - p.config.hanging_indent;
-    let mut offset = Abs::zero();
-
-    // We always build the line from left to right. In an LTR paragraph, we must
-    // thus add the hanging indent to the offset. In an RTL paragraph, the
-    // hanging indent arises naturally due to the line width.
-    if p.config.dir == Dir::LTR {
-        offset += p.config.hanging_indent;
-    }
-
-    // Handle hanging punctuation to the left.
-    if let Some(text) = line.items.leading_text()
-        && let Some(glyph) = text.glyphs.first()
-        && !text.dir.is_positive()
-        && text.styles.get(TextElem::overhang)
-        && (line.items.len() > 1 || text.glyphs.len() > 1)
-    {
-        let amount = overhang(glyph.c) * glyph.x_advance.at(glyph.size);
-        offset -= amount;
-        remaining += amount;
-    }
-
-    // Handle hanging punctuation to the right.
-    if let Some(text) = line.items.trailing_text()
-        && let Some(glyph) = text.glyphs.last()
-        && text.dir.is_positive()
-        && text.styles.get(TextElem::overhang)
-        && (line.items.len() > 1 || text.glyphs.len() > 1)
-    {
-        let amount = overhang(glyph.c) * glyph.x_advance.at(glyph.size);
-        remaining += amount;
-    }
+    let (mut offset, mut remaining, fr) = line_layout_basis(p, line, width);
 
     // Determine how much additional space is needed. The justification_ratio is
     // for the first step justification, extra_justification is for the last
     // step. For more info on multi-step justification, see Procedures for
     // Inter- Character Space Expansion in W3C document Chinese Layout
     // Requirements.
-    let fr = line.fr();
     let mut justification_ratio = 0.0;
     let mut extra_justification = Abs::zero();
-
     let shrinkability = line.shrinkability();
     let stretchability = line.stretchability();
     if remaining < Abs::zero() && shrinkability > Abs::zero() {
@@ -629,6 +596,76 @@ pub fn commit(
     }
 
     Ok(output)
+}
+
+/// Compute the occupied right edge of a line in the same x-coordinate system
+/// as its containing paragraph region.
+pub fn right_edge(p: &Preparation, line: &Line, width: Abs) -> Abs {
+    let (offset, mut remaining, fr) = line_layout_basis(p, line, width);
+    let shrinkability = line.shrinkability();
+    let stretchability = line.stretchability();
+
+    if remaining < Abs::zero() && shrinkability > Abs::zero() {
+        remaining = (remaining + shrinkability).min(Abs::zero());
+    } else if line.justify && fr.is_zero() {
+        if stretchability > Abs::zero() {
+            remaining = (remaining - stretchability).max(Abs::zero());
+        }
+
+        if line.justifiables() > 0 && remaining > Abs::zero() {
+            remaining = Abs::zero();
+        }
+    }
+
+    let mut right = offset + line.width;
+
+    // Fractional spacing consumes all remaining free space before alignment.
+    if !fr.is_zero() {
+        right += remaining;
+        remaining = Abs::zero();
+    }
+
+    right + p.config.align.position(remaining)
+}
+
+/// Compute the baseline line placement values shared by frame construction and
+/// geometric measurements.
+fn line_layout_basis(p: &Preparation, line: &Line, width: Abs) -> (Abs, Abs, Fr) {
+    let mut remaining = width - line.width - p.config.hanging_indent;
+    let mut offset = Abs::zero();
+
+    // We always build the line from left to right. In an LTR paragraph, we
+    // thus add the hanging indent to the offset. In an RTL paragraph, the
+    // hanging indent arises naturally due to the line width.
+    if p.config.dir == Dir::LTR {
+        offset += p.config.hanging_indent;
+    }
+
+    // Handle hanging punctuation to the left.
+    if let Some(text) = line.items.leading_text()
+        && let Some(glyph) = text.glyphs.first()
+        && !text.dir.is_positive()
+        && text.styles.get(TextElem::overhang)
+        && (line.items.len() > 1 || text.glyphs.len() > 1)
+    {
+        let amount = overhang(glyph.c) * glyph.x_advance.at(glyph.size);
+        offset -= amount;
+        remaining += amount;
+    }
+
+    // Handle hanging punctuation to the right.
+    if let Some(text) = line.items.trailing_text()
+        && let Some(glyph) = text.glyphs.last()
+        && text.dir.is_positive()
+        && text.styles.get(TextElem::overhang)
+        && (line.items.len() > 1 || text.glyphs.len() > 1)
+    {
+        let amount = overhang(glyph.c) * glyph.x_advance.at(glyph.size);
+        remaining += amount;
+    }
+
+    let fr = line.fr();
+    (offset, remaining, fr)
 }
 
 /// Adds a paragraph line marker to a paragraph line's output frame if
