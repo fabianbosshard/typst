@@ -12,7 +12,7 @@ use crate::foundations::{
 };
 use crate::introspection::{Count, Counter, CounterUpdate, Locatable, Tagged};
 use crate::layout::{
-    AlignElem, Alignment, BlockElem, Em, Length, OuterHAlignment, Rel, Spacing,
+    Abs, AlignElem, Alignment, BlockElem, Em, Length, OuterHAlignment, Rel, Spacing,
     SpecificAlignment, VAlignment,
 };
 use crate::math::MathSize;
@@ -53,12 +53,42 @@ pub struct EquationElem {
     #[default(false)]
     pub block: bool,
 
+    /// The display skip above a detached block equation.
+    ///
+    /// This is used on the equation's top side when there is a paragraph break
+    /// before the equation (for instance, due to a blank line).
+    #[default(Smart::Auto)]
+    pub display_above_skip: Smart<Spacing>,
+
+    /// The display skip below a detached block equation.
+    ///
+    /// This is used on the equation's bottom side when there is a paragraph
+    /// break after the equation (for instance, due to a blank line).
+    #[default(Smart::Auto)]
+    pub display_below_skip: Smart<Spacing>,
+
+    /// The attached skip above a block equation.
+    ///
+    /// This is used on the equation's top side when there is no paragraph break
+    /// before the equation and it attaches to the preceding paragraph.
+    #[default(Smart::Auto)]
+    pub attach_above_skip: Smart<Spacing>,
+
+    /// The attached skip below a block equation.
+    ///
+    /// This is used on the equation's bottom side when there is no paragraph
+    /// break after the equation and it attaches to the following paragraph.
+    #[default(Smart::Auto)]
+    pub attach_below_skip: Smart<Spacing>,
+
     /// The reduced spacing used for short display skips.
     ///
-    /// This spacing is used when a block equation is tightly attached to a
-    /// paragraph and the adjacent line is short enough to allow additional
-    /// vertical tightening.
-    #[default(Smart::Auto)]
+    /// This spacing is used above a block equation when it is attached to the
+    /// preceding paragraph and the preceding line is short enough to pass the
+    /// short-skip predicate.
+    ///
+    /// To mimic TeX's `\abovedisplayshortskip`, the default is `0pt`.
+    #[default(Smart::Custom(Abs::zero().into()))]
     pub short_skip: Smart<Spacing>,
 
     /// Extra horizontal margin used for short display skip detection.

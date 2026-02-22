@@ -384,6 +384,18 @@ pub struct BlockElem {
     #[parse(Some(Smart::Auto))]
     pub par_attach_spacing: Smart<Spacing>,
 
+    /// The spacing to use above this block when it attaches to the preceding
+    /// paragraph.
+    #[internal]
+    #[parse(Some(Smart::Auto))]
+    pub par_attach_above: Smart<Spacing>,
+
+    /// The spacing to use below this block when it attaches to the following
+    /// paragraph.
+    #[internal]
+    #[parse(Some(Smart::Auto))]
+    pub par_attach_below: Smart<Spacing>,
+
     /// Whether this block came from a block-level equation.
     #[internal]
     #[parse(Some(false))]

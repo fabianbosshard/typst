@@ -388,7 +388,14 @@ standalone after <standalone-after>
 --- issue-3206-matrix-per-side-spacing-levels ---
 #set page(width: 260pt, margin: 10pt)
 #set par(spacing: 12pt, leading: 4pt)
-#set math.equation(short-skip-margin: 0pt)
+#set math.equation(
+  display-above-skip: 12pt,
+  display-below-skip: 12pt,
+  attach-above-skip: 4pt,
+  attach-below-skip: 4pt,
+  short-skip: 1pt,
+  short-skip-margin: 0pt,
+)
 #show math.equation: set align(center)
 
 // no blank before + short previous line => very small above (orphan short-skip)
@@ -409,6 +416,11 @@ $ mat(1, 2; 3, 4) $ <matrix-big-eq>
 $ mat(1, 2; 3, 4) $ <matrix-small-below-eq>
 small-below text <matrix-small-below-after>
 
+// orphan above + no blank after still keeps normal small below
+#box(width: 20pt, inset: 0pt)[x] <matrix-orphan-below-before>
+$ mat(1, 2; 3, 4) $ <matrix-orphan-below-eq>
+orphan-below text <matrix-orphan-below-after>
+
 // blank after => big below
 #box(width: 120pt, inset: 0pt)[x] <matrix-big-below-before>
 $ mat(1, 2; 3, 4) $ <matrix-big-below-eq>
@@ -421,6 +433,7 @@ big-below text <matrix-big-below-after>
   let big-above = locate(<matrix-big-eq>).position().y - locate(<matrix-big-before>).position().y
 
   let small-below = locate(<matrix-small-below-after>).position().y - locate(<matrix-small-below-eq>).position().y
+  let orphan-below = locate(<matrix-orphan-below-after>).position().y - locate(<matrix-orphan-below-eq>).position().y
   let big-below = locate(<matrix-big-below-after>).position().y - locate(<matrix-big-below-eq>).position().y
 
   // no blank before: orphan can reduce above from small to very small
@@ -429,6 +442,7 @@ big-below text <matrix-big-below-after>
   assert(big-above > small-above)
   assert(big-above > vsmall-above)
   // below spacing only depends on blank line after, no orphan logic below
+  assert.eq(orphan-below, small-below)
   assert(big-below > small-below)
 }
 

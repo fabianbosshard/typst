@@ -260,12 +260,13 @@ impl<'a> Collector<'a, '_, '_> {
         };
 
         let fallback = LazyCell::new(|| styles.resolve(ParElem::spacing));
-        let leading = styles.resolve(ParElem::leading);
         let attachable = elem.par_attach.get(styles);
         let attach_prev =
             attachable && !elem.par_break_before.get(styles) && self.may_attach;
         let attach_next = attachable && !elem.par_break_after.get(styles) && next_is_par;
         let attach_spacing = elem.par_attach_spacing.get(styles);
+        let attach_above_spacing = elem.par_attach_above.get(styles);
+        let attach_below_spacing = elem.par_attach_below.get(styles);
 
         enum PreparedSpacing {
             Rel(Rel<Abs>, u8),
@@ -280,17 +281,20 @@ impl<'a> Collector<'a, '_, '_> {
             Smart::Custom(Spacing::Fr(fr)) => PreparedSpacing::Fr(fr),
         };
 
-        let attached_side_spacing = |side| match attach_spacing {
-            Smart::Auto => side,
+        let attached_side_spacing = |side, side_attach| match side_attach {
             Smart::Custom(spacing) => Smart::Custom(spacing),
+            Smart::Auto => match attach_spacing {
+                Smart::Auto => side,
+                Smart::Custom(spacing) => Smart::Custom(spacing),
+            },
         };
 
         let equation_short_skip = match elem.equation_short_skip.get(styles) {
-            Smart::Auto => leading / 2.0,
+            Smart::Auto => Abs::zero(),
             Smart::Custom(Spacing::Rel(rel)) => {
                 rel.resolve(styles).relative_to(self.base.y)
             }
-            Smart::Custom(Spacing::Fr(_)) => leading / 2.0,
+            Smart::Custom(Spacing::Fr(_)) => Abs::zero(),
         };
 
         let equation_short_skip_margin = {
@@ -301,7 +305,11 @@ impl<'a> Collector<'a, '_, '_> {
         };
 
         let mut above = if attach_prev {
-            resolve_spacing(attached_side_spacing(elem.above.get(styles)), 1, 1)
+            resolve_spacing(
+                attached_side_spacing(elem.above.get(styles), attach_above_spacing),
+                1,
+                1,
+            )
         } else {
             resolve_spacing(elem.above.get(styles), 4, 3)
         };
@@ -355,7 +363,11 @@ impl<'a> Collector<'a, '_, '_> {
         };
 
         let below = if attach_next {
-            resolve_spacing(attached_side_spacing(elem.below.get(styles)), 1, 1)
+            resolve_spacing(
+                attached_side_spacing(elem.below.get(styles), attach_below_spacing),
+                1,
+                1,
+            )
         } else {
             resolve_spacing(elem.below.get(styles), 4, 3)
         };
