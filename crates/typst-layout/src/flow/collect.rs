@@ -286,11 +286,11 @@ impl<'a> Collector<'a, '_, '_> {
         };
 
         let equation_short_skip = match elem.equation_short_skip.get(styles) {
-            Smart::Auto => leading,
+            Smart::Auto => leading / 2.0,
             Smart::Custom(Spacing::Rel(rel)) => {
                 rel.resolve(styles).relative_to(self.base.y)
             }
-            Smart::Custom(Spacing::Fr(_)) => leading,
+            Smart::Custom(Spacing::Fr(_)) => leading / 2.0,
         };
 
         let equation_short_skip_margin = {
