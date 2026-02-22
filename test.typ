@@ -152,7 +152,8 @@ fdfkj
 
 
 fdsljfdflsdfkjj
-dfddfd dfjdkfjdkfj 
+dfddfd dfjdkfjdkfj djfksdjf djfk djfkdsjf
+
 $
   matr(A) = matr(Q)_1 matr(R)_1 bold(Q)_1
 $
