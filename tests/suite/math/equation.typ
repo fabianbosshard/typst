@@ -396,6 +396,24 @@ $ E = m c^2 $ <e8>
   assert(g4 < g8)
 }
 
+--- issue-2438-equation-short-skip-cutoff ---
+#set page(width: 260pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+
+// With default short-skip margin, this should still count as short.
+#box(width: 60pt, inset: 0pt)[x] <cutoff-short-before>
+$ E = m c^2 $ <cutoff-short-eq>
+
+// This should be long enough to use normal above spacing.
+#box(width: 80pt, inset: 0pt)[x] <cutoff-long-before>
+$ E = m c^2 $ <cutoff-long-eq>
+
+#context {
+  let short-above = locate(<cutoff-short-eq>).position().y - locate(<cutoff-short-before>).position().y
+  let long-above = locate(<cutoff-long-eq>).position().y - locate(<cutoff-long-before>).position().y
+  assert(short-above < long-above)
+}
+
 --- issue-2438-equation-short-skip-alignment ---
 #set page(width: 220pt, margin: 10pt)
 #set par(spacing: 12pt, leading: 4pt)
