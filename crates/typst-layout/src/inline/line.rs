@@ -10,6 +10,7 @@ use typst_library::text::{
     BottomEdge, BottomEdgeMetric, DecoLine, Decoration, Font, Lang, TextEdgeBounds,
     TextElem, TopEdge, TopEdgeMetric, variant,
 };
+use typst_library::visualize::{FixedStroke, Geometry};
 use typst_syntax::Span;
 use typst_utils::Numeric;
 
@@ -492,6 +493,15 @@ struct HighlightSegment {
     bottom: Abs,
 }
 
+#[derive(Clone)]
+struct LineDecoSegment {
+    start: Abs,
+    end: Abs,
+    offset: Abs,
+    stroke: FixedStroke,
+    background: bool,
+}
+
 /// Collect highlight segments for a text item in line coordinates.
 fn collect_text_highlights(
     engine: &Engine,
@@ -707,6 +717,207 @@ fn paint_highlight_segments(
     }
 }
 
+/// Whether this decoration is an underline, overline, or strikethrough.
+fn is_line_deco(deco: &Decoration) -> bool {
+    matches!(
+        deco.line,
+        DecoLine::Underline { .. }
+            | DecoLine::Overline { .. }
+            | DecoLine::Strikethrough { .. }
+    )
+}
+
+/// Extend frame line decorations from neighboring text runs if needed.
+fn inherit_neighbor_line_decos(
+    line: &Line,
+    visual_pos: usize,
+    decos: &mut Vec<Decoration>,
+) {
+    if decos.iter().any(is_line_deco) {
+        return;
+    }
+
+    let mut extend_from = |item: &Item| {
+        let Item::Text(shaped) = item else {
+            return;
+        };
+        for deco in shaped.styles.get_cloned(TextElem::deco) {
+            if is_line_deco(&deco) && !decos.iter().any(|existing| existing == &deco) {
+                decos.push(deco);
+            }
+        }
+    };
+
+    for cursor in (0..visual_pos).rev() {
+        let item = &*line.items[cursor].1;
+        match item {
+            Item::Tag(_)
+            | Item::Skip(_)
+            | Item::Absolute(_, _)
+            | Item::Fractional(_, _) => continue,
+            _ => {
+                extend_from(item);
+                break;
+            }
+        }
+    }
+
+    for cursor in visual_pos + 1..line.items.len() {
+        let item = &*line.items[cursor].1;
+        match item {
+            Item::Tag(_)
+            | Item::Skip(_)
+            | Item::Absolute(_, _)
+            | Item::Fractional(_, _) => continue,
+            _ => {
+                extend_from(item);
+                break;
+            }
+        }
+    }
+}
+
+/// Collect line decoration segments for a frame item in line coordinates.
+fn collect_frame_line_decorations<'a>(
+    world: &Tracked<'a, dyn World + 'a>,
+    segments: &mut Vec<LineDecoSegment>,
+    decos: &[Decoration],
+    frame: &Frame,
+    styles: StyleChain<'a>,
+    start: Abs,
+    width: Abs,
+) {
+    if width <= Abs::zero() {
+        return;
+    }
+
+    let font = styles.get_ref(TextElem::font).into_iter().find_map(|family| {
+        world
+            .book()
+            .select(family.as_str(), variant(styles))
+            .and_then(|id| world.font(id))
+    });
+    let font_size = styles.resolve(TextElem::size);
+    let fill = styles.get_ref(TextElem::fill).as_decoration();
+    let font_metrics = font.as_ref().map(Font::metrics);
+    let frame_height = frame.ascent() + frame.descent();
+    let tall_frame = frame_height > 1.5 * font_size;
+
+    for deco in decos {
+        let (stroke, offset, evade, background, default_offset, default_thickness) =
+            match &deco.line {
+                DecoLine::Underline { stroke, offset, evade, background } => (
+                    stroke,
+                    offset,
+                    *evade,
+                    *background,
+                    font_metrics
+                        .as_ref()
+                        .map(|metrics| -metrics.underline.position.at(font_size))
+                        .unwrap_or_else(Abs::zero),
+                    font_metrics
+                        .as_ref()
+                        .map(|metrics| metrics.underline.thickness.at(font_size))
+                        .unwrap_or(Abs::pt(0.5)),
+                ),
+                DecoLine::Overline { stroke, offset, evade, background } => (
+                    stroke,
+                    offset,
+                    *evade,
+                    *background,
+                    font_metrics
+                        .as_ref()
+                        .map(|metrics| -metrics.overline.position.at(font_size))
+                        .unwrap_or_else(Abs::zero),
+                    font_metrics
+                        .as_ref()
+                        .map(|metrics| metrics.overline.thickness.at(font_size))
+                        .unwrap_or(Abs::pt(0.5)),
+                ),
+                DecoLine::Strikethrough { stroke, offset, background } => (
+                    stroke,
+                    offset,
+                    false,
+                    *background,
+                    font_metrics
+                        .as_ref()
+                        .map(|metrics| -metrics.strikethrough.position.at(font_size))
+                        .unwrap_or_else(Abs::zero),
+                    font_metrics
+                        .as_ref()
+                        .map(|metrics| metrics.strikethrough.thickness.at(font_size))
+                        .unwrap_or(Abs::pt(0.5)),
+                ),
+                _ => continue,
+            };
+
+        let default_offset = if offset.is_auto() && tall_frame {
+            match &deco.line {
+                DecoLine::Underline { .. } => frame.descent() - 0.08 * font_size,
+                DecoLine::Overline { .. } => -frame.ascent() + 0.08 * font_size,
+                DecoLine::Strikethrough { .. } => {
+                    (frame.descent() - frame.ascent()) / 2.0
+                }
+                _ => default_offset,
+            }
+        } else {
+            default_offset
+        };
+        let offset = offset.unwrap_or(default_offset);
+        let stroke = stroke
+            .clone()
+            .unwrap_or(FixedStroke::from_pair(fill.clone(), default_thickness));
+
+        // Text under/overlines with evasion leave small safety gaps around
+        // outlines. Expand frame segments slightly in that mode so mixed
+        // text+math lines stay visually continuous.
+        let overlap = if evade { 0.08 * font_size } else { Abs::zero() };
+        let decorated_start = start - deco.extent - overlap;
+        let end = decorated_start + width + 2.0 * (deco.extent + overlap);
+        if end <= decorated_start {
+            continue;
+        };
+
+        segments.push(LineDecoSegment {
+            start: decorated_start,
+            end,
+            offset,
+            stroke,
+            background,
+        });
+    }
+}
+
+/// Paint collected frame line decoration segments into the line frame.
+fn paint_line_deco_segments(
+    output: &mut Frame,
+    segments: &[LineDecoSegment],
+    line_top: Abs,
+    align_shift: Abs,
+    background: bool,
+) {
+    for segment in segments {
+        if segment.background != background {
+            continue;
+        }
+
+        let width = segment.end - segment.start;
+        if width <= Abs::zero() {
+            continue;
+        }
+
+        let origin = Point::new(segment.start + align_shift, line_top + segment.offset);
+        let shape = Geometry::Line(Point::new(width, Abs::zero()))
+            .stroked(segment.stroke.clone());
+        let item = FrameItem::Shape(shape, Span::detached());
+        if background {
+            output.prepend(origin, item);
+        } else {
+            output.push(origin, item);
+        }
+    }
+}
+
 /// Commit to a line and build its frame.
 #[allow(clippy::too_many_arguments)]
 pub fn commit(
@@ -750,10 +961,11 @@ pub fn commit(
     let mut top = Abs::zero();
     let mut bottom = Abs::zero();
     let mut highlight_segments: Vec<HighlightSegment> = vec![];
+    let mut line_deco_segments: Vec<LineDecoSegment> = vec![];
 
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
-    for &(idx, ref item) in line.items.indexed_iter() {
+    for (visual_pos, &(idx, ref item)) in line.items.indexed_iter().enumerate() {
         let mut push = |offset: &mut Abs, frame: Frame, idx: LogicalIndex| {
             let width = frame.width();
             top.set_max(frame.baseline());
@@ -775,9 +987,21 @@ pub fn commit(
                     })?;
                     apply_shift(&engine.world, &mut frame, *styles);
                     let start = offset;
+                    let mut line_decos: Vec<Decoration> =
+                        styles.get_cloned(TextElem::deco).into_iter().collect();
+                    inherit_neighbor_line_decos(line, visual_pos, &mut line_decos);
                     collect_frame_highlights(
                         &engine.world,
                         &mut highlight_segments,
+                        &frame,
+                        *styles,
+                        start,
+                        frame.width(),
+                    );
+                    collect_frame_line_decorations(
+                        &engine.world,
+                        &mut line_deco_segments,
+                        &line_decos,
                         &frame,
                         *styles,
                         start,
@@ -808,9 +1032,21 @@ pub fn commit(
             Item::Frame(frame, styles) => {
                 let frame = frame.clone();
                 let start = offset;
+                let mut line_decos: Vec<Decoration> =
+                    styles.get_cloned(TextElem::deco).into_iter().collect();
+                inherit_neighbor_line_decos(line, visual_pos, &mut line_decos);
                 collect_frame_highlights(
                     &engine.world,
                     &mut highlight_segments,
+                    &frame,
+                    *styles,
+                    start,
+                    frame.width(),
+                );
+                collect_frame_line_decorations(
+                    &engine.world,
+                    &mut line_deco_segments,
+                    &line_decos,
                     &frame,
                     *styles,
                     start,
@@ -842,6 +1078,7 @@ pub fn commit(
 
     let align_shift = p.config.align.position(remaining);
     paint_highlight_segments(&mut output, &highlight_segments, top, align_shift);
+    paint_line_deco_segments(&mut output, &line_deco_segments, top, align_shift, true);
 
     // Ensure that the final frame's items are in logical order rather than in
     // visual order. This is important because it affects the order of elements
@@ -854,6 +1091,7 @@ pub fn commit(
         let y = top - frame.baseline();
         output.push_frame(Point::new(x, y), frame);
     }
+    paint_line_deco_segments(&mut output, &line_deco_segments, top, align_shift, false);
 
     Ok(output)
 }

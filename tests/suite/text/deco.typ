@@ -36,6 +36,27 @@ There might be #highlight-custom[redacted] things.
 #set underline(background: true, stroke: (thickness: 0.5em, paint: red, cap: "round"))
 #underline[This is in the background]
 
+--- underline-math-inline ---
+// Test underline continuity across inline math.
+#set page(width: 140pt, height: auto, margin: 8pt)
+#underline[product $sigma$-algebra]
+#block(width: 96pt)[#underline[The product $sigma$-algebra is generated.]]
+#underline[$ a + b \ c + d $]
+
+--- overline-math-inline ---
+// Test overline continuity across inline math.
+#set page(width: 140pt, height: auto, margin: 8pt)
+#overline[product $sigma$-algebra]
+#block(width: 96pt)[#overline[The product $sigma$-algebra is generated.]]
+#overline[$ a + b \ c + d $]
+
+--- strike-math-inline ---
+// Test strike continuity across inline math.
+#set page(width: 140pt, height: auto, margin: 8pt)
+#strike[product $sigma$-algebra]
+#block(width: 96pt)[#strike[The product $sigma$-algebra is generated.]]
+#strike[$ "sdlfjdsk" + a + b \ c + d $]
+
 --- overline-background ---
 // Test overline background
 #set overline(background: true, stroke: (thickness: 0.5em, paint: red, cap: "round"))
