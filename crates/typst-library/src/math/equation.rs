@@ -65,7 +65,7 @@ pub struct EquationElem {
     ///
     /// A short skip is applied above a block equation only when the previous
     /// line ends at least this far before the equation's left edge.
-    #[default(Em::new(2.0).into())]
+    #[default(Em::new(0.25).into())]
     pub short_skip_margin: Rel<Length>,
 
     /// How to number block-level equations. Accepts a
