@@ -823,6 +823,7 @@ const EQUATION_RULE: ShowFn<EquationElem> = |elem, _, styles| {
             .with_par_attach_spacing(Smart::Custom(attach_spacing.into()))
             .with_equation(true)
             .with_equation_short_skip(elem.short_skip.get(styles))
+            .with_equation_short_skip_margin(elem.short_skip_margin.get(styles))
             .pack())
     } else {
         Ok(InlineElem::layouter(elem.clone(), crate::math::layout_equation_inline).pack())

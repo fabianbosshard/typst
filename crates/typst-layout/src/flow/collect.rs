@@ -50,7 +50,6 @@ pub fn collect<'a>(
         par_situation: ParSituation::First,
         may_attach: false,
         last_paragraph_line_width: None,
-        pending_equation_below: None,
     }
     .run(mode)
 }
@@ -67,13 +66,6 @@ struct Collector<'a, 'x, 'y> {
     par_situation: ParSituation,
     may_attach: bool,
     last_paragraph_line_width: Option<Abs>,
-    pending_equation_below: Option<PendingEquationBelow>,
-}
-
-#[derive(Debug, Copy, Clone)]
-struct PendingEquationBelow {
-    spacing_index: usize,
-    short: Rel<Abs>,
 }
 
 impl<'a> Collector<'a, '_, '_> {
@@ -88,13 +80,6 @@ impl<'a> Collector<'a, '_, '_> {
     /// Perform collection for block-level children.
     fn run_block(mut self) -> SourceResult<Vec<Child<'a>>> {
         for (i, &(child, styles)) in self.children.iter().enumerate() {
-            if self.pending_equation_below.is_some()
-                && !child.is::<TagElem>()
-                && !child.is::<ParElem>()
-            {
-                self.pending_equation_below = None;
-            }
-
             if let Some(elem) = child.to_packed::<TagElem>() {
                 self.output.push(Child::Tag(&elem.tag));
             } else if let Some(elem) = child.to_packed::<VElem>() {
@@ -103,7 +88,7 @@ impl<'a> Collector<'a, '_, '_> {
             } else if let Some(elem) = child.to_packed::<ParElem>() {
                 self.par(elem, styles)?;
             } else if let Some(elem) = child.to_packed::<BlockElem>() {
-                self.block(elem, styles, self.next_non_tag_is_par(i + 1));
+                self.block(elem, styles, self.next_non_tag_is_par(i + 1))?;
             } else if let Some(elem) = child.to_packed::<PlaceElem>() {
                 self.place(elem, styles)?;
                 self.may_attach = false;
@@ -193,7 +178,6 @@ impl<'a> Collector<'a, '_, '_> {
             self.expand,
             self.par_situation,
         )?;
-        self.resolve_pending_equation_below(layout.first_line_width.unwrap_or_default());
         self.last_paragraph_line_width = layout.last_line_width;
         let lines = layout.fragment.into_frames();
 
@@ -263,7 +247,7 @@ impl<'a> Collector<'a, '_, '_> {
         elem: &'a Packed<BlockElem>,
         styles: StyleChain<'a>,
         next_is_par: bool,
-    ) {
+    ) -> SourceResult<()> {
         let locator = self.locator.next(&elem.span());
         let align = styles.resolve(AlignElem::alignment);
         let alone = self.children.len() == 1;
@@ -300,10 +284,19 @@ impl<'a> Collector<'a, '_, '_> {
             Smart::Custom(spacing) => Smart::Custom(spacing),
         };
 
-        let equation_short_skip = || match elem.equation_short_skip.get(styles) {
+        let equation_short_skip = match elem.equation_short_skip.get(styles) {
             Smart::Auto => leading / 2.0,
-            Smart::Custom(Spacing::Rel(rel)) => rel.resolve(styles).relative_to(self.base.y),
+            Smart::Custom(Spacing::Rel(rel)) => {
+                rel.resolve(styles).relative_to(self.base.y)
+            }
             Smart::Custom(Spacing::Fr(_)) => leading / 2.0,
+        };
+
+        let equation_short_skip_margin = {
+            elem.equation_short_skip_margin
+                .get(styles)
+                .resolve(styles)
+                .relative_to(self.base.x)
         };
 
         let mut above = if attach_prev {
@@ -314,15 +307,19 @@ impl<'a> Collector<'a, '_, '_> {
 
         if elem.equation.get(styles)
             && attach_prev
-            && self
-                .last_paragraph_line_width()
-                .is_some_and(|line_width| self.is_short_display_line(line_width))
+            && let Some(prev_width) = self.last_paragraph_line_width()
+            && prev_width
+                <= self.equation_left_edge(
+                    elem,
+                    styles,
+                    align,
+                    breakable,
+                    fr,
+                    locator.relayout(),
+                )? - equation_short_skip_margin
             && let PreparedSpacing::Rel(amount, weakness) = &mut above
         {
-            *amount = amount
-                .relative_to(self.base.y)
-                .min(equation_short_skip())
-                .into();
+            *amount = amount.relative_to(self.base.y).min(equation_short_skip).into();
             *weakness = (*weakness).min(1);
         }
 
@@ -356,25 +353,11 @@ impl<'a> Collector<'a, '_, '_> {
             })));
         };
 
-        let mut below = if attach_next {
+        let below = if attach_next {
             resolve_spacing(attached_side_spacing(elem.below.get(styles)), 1, 1)
         } else {
             resolve_spacing(elem.below.get(styles), 4, 3)
         };
-
-        let spacing_index = self.output.len();
-        if elem.equation.get(styles)
-            && attach_next
-            && let PreparedSpacing::Rel(amount, weakness) = &mut below
-        {
-            *weakness = (*weakness).min(1);
-            let resolved = amount.relative_to(self.base.y);
-            let short = resolved.min(equation_short_skip());
-            if short < resolved {
-                self.pending_equation_below =
-                    Some(PendingEquationBelow { spacing_index, short: short.into() });
-            }
-        }
 
         match below {
             PreparedSpacing::Rel(amount, weakness) => {
@@ -396,6 +379,8 @@ impl<'a> Collector<'a, '_, '_> {
             ParSituation::Other
         };
         self.may_attach = false;
+
+        Ok(())
     }
 
     /// Whether the next non-tag element is a paragraph.
@@ -412,36 +397,67 @@ impl<'a> Collector<'a, '_, '_> {
         false
     }
 
-    /// Potentially reduces pending below-equation spacing to short display
-    /// spacing if the first line below the equation is short.
-    fn resolve_pending_equation_below(&mut self, first_line_width: Abs) {
-        let Some(pending) = self.pending_equation_below.take() else {
-            return;
-        };
-
-        if !self.is_short_display_line(first_line_width) {
-            return;
-        }
-
-        if let Some(Child::Rel(amount, weakness)) =
-            self.output.get_mut(pending.spacing_index)
-        {
-            *amount = pending.short;
-            *weakness = (*weakness).min(1);
-        }
-    }
-
     /// The width of the latest emitted paragraph line, if the previous emitted
     /// semantic item is a line.
     fn last_paragraph_line_width(&self) -> Option<Abs> {
         self.last_paragraph_line_width
     }
 
-    /// Whether a paragraph line should use short display skips around attached
-    /// equations.
-    fn is_short_display_line(&self, line_width: Abs) -> bool {
-        const SHORT_DISPLAY_THRESHOLD: Ratio = Ratio::new(0.5);
-        line_width <= SHORT_DISPLAY_THRESHOLD.of(self.base.x)
+    /// Computes the x-coordinate of a block equation's left edge after
+    /// horizontal alignment in the current paragraph region.
+    fn equation_left_edge(
+        &mut self,
+        elem: &Packed<BlockElem>,
+        styles: StyleChain,
+        align: Axes<FixedAlignment>,
+        breakable: bool,
+        fr: Option<Fr>,
+        locator: Locator,
+    ) -> SourceResult<Abs> {
+        let width = self.measure_block_width(elem, styles, breakable, fr, locator)?;
+        Ok(align.x.position(self.base.x - width))
+    }
+
+    /// Measures a block's laid out width in the flow's base region.
+    fn measure_block_width(
+        &mut self,
+        elem: &Packed<BlockElem>,
+        styles: StyleChain,
+        breakable: bool,
+        fr: Option<Fr>,
+        locator: Locator,
+    ) -> SourceResult<Abs> {
+        let region = Region::new(self.base, Axes::new(self.expand, false));
+
+        if !breakable || fr.is_some() {
+            return layout_single_impl(
+                self.engine.routines,
+                self.engine.world,
+                self.engine.introspector,
+                self.engine.traced,
+                TrackedMut::reborrow_mut(&mut self.engine.sink),
+                self.engine.route.track(),
+                elem,
+                locator.track(),
+                styles,
+                region,
+            )
+            .map(|frame| frame.width());
+        }
+
+        layout_multi_impl(
+            self.engine.routines,
+            self.engine.world,
+            self.engine.introspector,
+            self.engine.traced,
+            TrackedMut::reborrow_mut(&mut self.engine.sink),
+            self.engine.route.track(),
+            elem,
+            locator.track(),
+            styles,
+            region.into(),
+        )
+        .map(|fragment| fragment.iter().next().map(Frame::width).unwrap_or_default())
     }
 
     /// Collects a placed element into a [`PlacedChild`].

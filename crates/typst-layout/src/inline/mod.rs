@@ -45,8 +45,6 @@ type Range = std::ops::Range<usize>;
 pub struct ParLayout {
     /// The resulting laid out frames.
     pub fragment: Fragment,
-    /// The width of the first line's content.
-    pub first_line_width: Option<Abs>,
     /// The width of the last line's content.
     pub last_line_width: Option<Abs>,
 }
@@ -183,13 +181,12 @@ fn layout_inline_impl<'a>(
 
     // Break the text into lines.
     let lines = linebreak(engine, &p, region.x - config.hanging_indent);
-    let first_line_width = lines.first().map(|line| line.width);
     let last_line_width = lines.last().map(|line| line.width);
 
     // Turn the selected lines into frames.
     let fragment = finalize(engine, &p, &lines, region, expand, locator)?;
 
-    Ok(ParLayout { fragment, first_line_width, last_line_width })
+    Ok(ParLayout { fragment, last_line_width })
 }
 
 /// Determine the inline layout's configuration.

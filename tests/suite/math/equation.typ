@@ -364,13 +364,13 @@ standalone after
 #set par(spacing: 12pt, leading: 4pt)
 #set math.equation(short-skip: 1pt)
 
-LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL <long-before>
-$ x = y $ <long-eq>
-after long
-
-S <short-before>
+// 20pt is safely before the centered equation's left edge (short skip).
+#box(width: 20pt, inset: 0pt)[x] <short-before>
 $ x = y $ <short-eq>
-after short
+
+// 140pt extends into the centered equation's horizontal span (normal skip).
+#box(width: 140pt, inset: 0pt)[x] <long-before>
+$ x = y $ <long-eq>
 
 #context {
   let long-above = locate(<long-eq>).position().y - locate(<long-before>).position().y
@@ -392,4 +392,50 @@ $ E = m c^2 $ <e8>
   let g4 = locate(<e4>).position().y - locate(<l4>).position().y
   let g8 = locate(<e8>).position().y - locate(<l8>).position().y
   assert(g4 < g8)
+}
+
+--- issue-2438-equation-short-skip-alignment ---
+#set page(width: 220pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+#set math.equation(short-skip: 1pt)
+
+#show math.equation: set align(center)
+#box(width: 120pt, inset: 0pt)[x] <center-before>
+$ x = y $ <center-eq>
+
+#show math.equation: set align(right)
+#box(width: 120pt, inset: 0pt)[x] <right-before>
+$ x = y $ <right-eq>
+
+#show math.equation: set align(left)
+#box(width: 20pt, inset: 0pt)[x] <left-before>
+$ x = y $ <left-eq>
+
+#context {
+  let center-above = locate(<center-eq>).position().y - locate(<center-before>).position().y
+  let right-above = locate(<right-eq>).position().y - locate(<right-before>).position().y
+  let left-above = locate(<left-eq>).position().y - locate(<left-before>).position().y
+
+  assert(right-above < center-above)
+  assert(right-above < left-above)
+}
+
+--- issue-2438-equation-short-skip-margin ---
+#set page(width: 220pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+#set math.equation(short-skip: 1pt, short-skip-margin: 0pt)
+#show math.equation: set align(center)
+
+#box(width: 20pt, inset: 0pt)[x] <margin-zero-before>
+$ x = y $ <margin-zero-eq>
+
+#set math.equation(short-skip-margin: 120pt)
+#box(width: 20pt, inset: 0pt)[x] <margin-large-before>
+$ x = y $ <margin-large-eq>
+
+#context {
+  let gap-zero = locate(<margin-zero-eq>).position().y - locate(<margin-zero-before>).position().y
+  let gap-large = locate(<margin-large-eq>).position().y - locate(<margin-large-before>).position().y
+
+  assert(gap-zero < gap-large)
 }

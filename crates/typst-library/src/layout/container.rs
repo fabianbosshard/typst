@@ -394,6 +394,11 @@ pub struct BlockElem {
     #[parse(Some(Smart::Auto))]
     pub equation_short_skip: Smart<Spacing>,
 
+    /// Extra horizontal margin required before short equation skips apply.
+    #[internal]
+    #[parse(Some(Rel::zero()))]
+    pub equation_short_skip_margin: Rel<Length>,
+
     /// The contents of the block.
     #[positional]
     pub body: Option<BlockBody>,

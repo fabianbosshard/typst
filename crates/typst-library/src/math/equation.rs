@@ -12,7 +12,8 @@ use crate::foundations::{
 };
 use crate::introspection::{Count, Counter, CounterUpdate, Locatable, Tagged};
 use crate::layout::{
-    AlignElem, Alignment, BlockElem, OuterHAlignment, Spacing, SpecificAlignment, VAlignment,
+    AlignElem, Alignment, BlockElem, Length, OuterHAlignment, Rel, Spacing,
+    SpecificAlignment, VAlignment,
 };
 use crate::math::MathSize;
 use crate::model::{Numbering, Outlinable, ParLine, Refable, Supplement};
@@ -59,6 +60,13 @@ pub struct EquationElem {
     /// vertical tightening.
     #[default(Smart::Auto)]
     pub short_skip: Smart<Spacing>,
+
+    /// Extra horizontal margin used for short display skip detection.
+    ///
+    /// A short skip is applied above a block equation only when the previous
+    /// line ends at least this far before the equation's left edge.
+    #[default(Rel::zero())]
+    pub short_skip_margin: Rel<Length>,
 
     /// How to number block-level equations. Accepts a
     /// [numbering pattern or function]($numbering) taking a single number.
