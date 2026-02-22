@@ -336,7 +336,7 @@ B standalone <standalone>
   assert(x-standalone > x-tight)
 }
 
---- issue-3206-equation-attached-spacing ---
+--- issue-3206-paragraph-attach-spacing ---
 #set page(width: 260pt, margin: 10pt)
 #set par(spacing: 12pt, leading: 4pt)
 #set math.equation(short-skip: 100pt, short-skip-margin: 0pt)
@@ -445,6 +445,58 @@ $ E = m c^2 $ <cutoff-long-eq>
   let short-above = locate(<cutoff-short-eq>).position().y - locate(<cutoff-short-before>).position().y
   let long-above = locate(<cutoff-long-eq>).position().y - locate(<cutoff-long-before>).position().y
   assert(short-above < long-above)
+}
+
+--- issue-2438-orphan-cutoff-sweep ---
+#set page(width: 260pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+#set math.equation(short-skip: 1pt, short-skip-margin: 0pt)
+#show math.equation: set align(center)
+
+#box(width: 60pt, inset: 0pt)[x] <sweep-60-before>
+$ E = m c^2 $ <sweep-60-eq>
+
+#box(width: 80pt, inset: 0pt)[x] <sweep-80-before>
+$ E = m c^2 $ <sweep-80-eq>
+
+#box(width: 100pt, inset: 0pt)[x] <sweep-100-before>
+$ E = m c^2 $ <sweep-100-eq>
+
+#box(width: 120pt, inset: 0pt)[x] <sweep-120-before>
+$ E = m c^2 $ <sweep-120-eq>
+
+#context {
+  let g60 = locate(<sweep-60-eq>).position().y - locate(<sweep-60-before>).position().y
+  let g80 = locate(<sweep-80-eq>).position().y - locate(<sweep-80-before>).position().y
+  let g100 = locate(<sweep-100-eq>).position().y - locate(<sweep-100-before>).position().y
+  let g120 = locate(<sweep-120-eq>).position().y - locate(<sweep-120-before>).position().y
+
+  // Below cutoff => very small, above cutoff => normal attached small.
+  assert(calc.abs(g60 - g80) < 0.01pt)
+  assert(calc.abs(g100 - g120) < 0.01pt)
+  assert(g60 < g100)
+}
+
+--- issue-2438-default-margin-behavior ---
+#set page(width: 260pt, margin: 10pt)
+#set par(spacing: 12pt, leading: 4pt)
+#set math.equation(short-skip: 1pt)
+#show math.equation: set align(center)
+
+#set math.equation(short-skip-margin: 0pt)
+#box(width: 98pt, inset: 0pt)[x] <margin-zero-before>
+$ E = m c^2 $ <margin-zero-eq>
+
+#set math.equation(short-skip-margin: 0.25em)
+#box(width: 98pt, inset: 0pt)[x] <margin-default-before>
+$ E = m c^2 $ <margin-default-eq>
+
+#context {
+  let zero-gap = locate(<margin-zero-eq>).position().y - locate(<margin-zero-before>).position().y
+  let default-gap = locate(<margin-default-eq>).position().y - locate(<margin-default-before>).position().y
+
+  // Default margin avoids near-corner short-skip activation.
+  assert(zero-gap < default-gap)
 }
 
 --- issue-2438-equation-short-skip-user-strings ---
