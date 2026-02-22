@@ -378,3 +378,18 @@ after short
 
   assert(short-above < long-above)
 }
+
+--- issue-2438-equation-short-skip-lorem ---
+#lorem(4) <l4>
+$ E = m c^2 $ <e4>
+
+#v(8pt)
+
+#lorem(8) <l8>
+$ E = m c^2 $ <e8>
+
+#context {
+  let g4 = locate(<e4>).position().y - locate(<l4>).position().y
+  let g8 = locate(<e8>).position().y - locate(<l8>).position().y
+  assert(g4 < g8)
+}

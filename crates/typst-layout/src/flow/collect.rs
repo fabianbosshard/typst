@@ -440,7 +440,7 @@ impl<'a> Collector<'a, '_, '_> {
     /// Whether a paragraph line should use short display skips around attached
     /// equations.
     fn is_short_display_line(&self, line_width: Abs) -> bool {
-        const SHORT_DISPLAY_THRESHOLD: Ratio = Ratio::new(0.7);
+        const SHORT_DISPLAY_THRESHOLD: Ratio = Ratio::new(0.5);
         line_width <= SHORT_DISPLAY_THRESHOLD.of(self.base.x)
     }
 
