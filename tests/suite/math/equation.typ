@@ -399,6 +399,7 @@ $ E = m c^2 $ <e8>
 --- issue-2438-equation-short-skip-cutoff ---
 #set page(width: 260pt, margin: 10pt)
 #set par(spacing: 12pt, leading: 4pt)
+#set math.equation(short-skip-margin: 0pt)
 
 // With default short-skip margin, this should still count as short.
 #box(width: 80pt, inset: 0pt)[x] <cutoff-short-before>
@@ -412,6 +413,30 @@ $ E = m c^2 $ <cutoff-long-eq>
   let short-above = locate(<cutoff-short-eq>).position().y - locate(<cutoff-short-before>).position().y
   let long-above = locate(<cutoff-long-eq>).position().y - locate(<cutoff-long-before>).position().y
   assert(short-above < long-above)
+}
+
+--- issue-2438-equation-short-skip-user-strings ---
+#set page(width: 700pt, margin: 12pt)
+#set par(first-line-indent: 1em, spacing: 0.65em, justify: true)
+#set math.equation(short-skip: 4pt)
+
+jfgkjfdgjfgjfgfdgfgldfjgkdfjgkdfjgkdfjgkdfjgkdfgjkfdjgkdfjgkdfjgkdf <u1>
+$
+  E = m c^2
+$ <u1e>
+
+jfgkjfdgjfgjfgfdgfgldfjgkdfjgkdfjgkdfjgkdfjgkdfgjkfdjgkdfjgkdfjgkdfsdfjsdf <u2>
+$
+  E = m c^2
+$ <u2e>
+
+#context {
+  let g1 = locate(<u1e>).position().y - locate(<u1>).position().y
+  let g2 = locate(<u2e>).position().y - locate(<u2>).position().y
+
+  // Near-threshold long lines should not get the reduced short skip by default.
+  assert.eq(g1, g2)
+  assert(g1 > 4pt)
 }
 
 --- issue-2438-equation-short-skip-line-offset ---

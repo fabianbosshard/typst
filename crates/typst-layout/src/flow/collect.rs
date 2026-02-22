@@ -415,15 +415,15 @@ impl<'a> Collector<'a, '_, '_> {
         fr: Option<Fr>,
         locator: Locator,
     ) -> SourceResult<Abs> {
-        let (x_min, x_max) =
-            self.measure_block_x_bounds(elem, styles, breakable, fr, locator)?;
-        let ink_width = (x_max - x_min).max(Abs::zero());
-        Ok(align.x.position(self.base.x - ink_width) + x_min)
+        let (frame_width, x_min) =
+            self.measure_block_x_metrics(elem, styles, breakable, fr, locator)?;
+        Ok(align.x.position(self.base.x - frame_width) + x_min.min(Abs::zero()))
     }
 
-    /// Measures a block's laid out horizontal ink bounds in the flow's base
+    /// Measures a block's laid out horizontal frame width and minimum ink x in
+    /// the flow's base
     /// region.
-    fn measure_block_x_bounds(
+    fn measure_block_x_metrics(
         &mut self,
         elem: &Packed<BlockElem>,
         styles: StyleChain,
@@ -447,10 +447,11 @@ impl<'a> Collector<'a, '_, '_> {
                 region,
             )
             .map(|frame| {
-                Self::frame_ink_bounds(&frame)
-                    .map_or((Abs::zero(), frame.width()), |bounds| {
-                        (bounds.min.x, bounds.max.x)
-                    })
+                (
+                    frame.width(),
+                    Self::frame_ink_bounds(&frame)
+                        .map_or(Abs::zero(), |bounds| bounds.min.x),
+                )
             });
         }
 
@@ -468,10 +469,11 @@ impl<'a> Collector<'a, '_, '_> {
         )
         .map(|fragment| {
             fragment.iter().next().map_or((Abs::zero(), Abs::zero()), |frame| {
-                Self::frame_ink_bounds(frame)
-                    .map_or((Abs::zero(), frame.width()), |bounds| {
-                        (bounds.min.x, bounds.max.x)
-                    })
+                (
+                    frame.width(),
+                    Self::frame_ink_bounds(frame)
+                        .map_or(Abs::zero(), |bounds| bounds.min.x),
+                )
             })
         })
     }
