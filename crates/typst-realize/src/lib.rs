@@ -691,7 +691,6 @@ fn visit_grouping_rules<'a>(
             && ((active.rule.trigger)(content, s) || (active.rule.inner)(content))
         {
             s.sink.push((content, styles));
-            s.last_was_parbreak = false;
             return Ok(true);
         }
 
@@ -713,7 +712,6 @@ fn visit_grouping_rules<'a>(
         let start = s.sink.len();
         s.groupings.push(Grouping { start, rule, interrupted: false });
         s.sink.push((content, styles));
-        s.last_was_parbreak = false;
         return Ok(true);
     }
 
