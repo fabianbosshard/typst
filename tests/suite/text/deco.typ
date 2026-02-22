@@ -95,9 +95,10 @@ We can also specify a customized value
 #set page(width: 140pt, height: auto, margin: 8pt)
 #set highlight(top-edge: "bounds", bottom-edge: "bounds", extent: 1.2pt, radius: 2pt)
 #highlight[$ x^2 + y^2 = z^2 $]
+#highlight[$ "sdlfjdsk" + x + y $]
 #highlight[
   Before.
-  $ sum_(i=1)^n i = n(n+1)/2 $
+  $ "sdlfjdsk" + sum_(i=1)^n i = n(n+1)/2 $
   After.
 ]
 

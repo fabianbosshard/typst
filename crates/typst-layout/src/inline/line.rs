@@ -7,8 +7,8 @@ use typst_library::introspection::{SplitLocator, Tag, TagFlags};
 use typst_library::layout::{Abs, Dir, Em, Fr, Frame, FrameItem, Point, Size};
 use typst_library::model::ParLineMarker;
 use typst_library::text::{
-    BottomEdge, BottomEdgeMetric, DecoLine, Lang, TextEdgeBounds, TextElem, TopEdge,
-    TopEdgeMetric, variant,
+    BottomEdge, BottomEdgeMetric, DecoLine, Decoration, Font, Lang, TextEdgeBounds,
+    TextElem, TopEdge, TopEdgeMetric, variant,
 };
 use typst_syntax::Span;
 use typst_utils::Numeric;
@@ -483,14 +483,46 @@ pub fn apply_shift<'a>(
     frame.translate(Point::new(compensation, baseline));
 }
 
-/// Apply highlight decorations for a frame-level inline item.
-fn decorate_frame_highlights<'a>(
-    world: &Tracked<'a, dyn World + 'a>,
-    frame: &mut Frame,
-    styles: StyleChain,
+#[derive(Clone)]
+struct HighlightSegment {
+    deco: Decoration,
+    start: Abs,
+    end: Abs,
+    top: Abs,
+    bottom: Abs,
+}
+
+/// Collect highlight segments for a text item in line coordinates.
+fn collect_text_highlights(
+    engine: &Engine,
+    segments: &mut Vec<HighlightSegment>,
+    shaped: &ShapedText<'_>,
+    start: Abs,
+    width: Abs,
 ) {
-    let decos = styles.get_cloned(TextElem::deco);
-    if decos.is_empty() {
+    if width <= Abs::zero() {
+        return;
+    }
+
+    for deco in shaped.styles.get_cloned(TextElem::deco) {
+        let DecoLine::Highlight { top_edge, bottom_edge, .. } = deco.line else {
+            continue;
+        };
+        let (top, bottom) = text_highlight_edges(engine, shaped, top_edge, bottom_edge);
+        push_highlight_segment(segments, deco, start, width, top, bottom);
+    }
+}
+
+/// Collect highlight segments for a frame item in line coordinates.
+fn collect_frame_highlights<'a>(
+    world: &Tracked<'a, dyn World + 'a>,
+    segments: &mut Vec<HighlightSegment>,
+    frame: &Frame,
+    styles: StyleChain<'a>,
+    start: Abs,
+    width: Abs,
+) {
+    if width <= Abs::zero() {
         return;
     }
 
@@ -502,32 +534,116 @@ fn decorate_frame_highlights<'a>(
     });
     let font_size = styles.resolve(TextElem::size);
 
-    for deco in &decos {
-        let DecoLine::Highlight { fill, stroke, top_edge, bottom_edge, radius } =
-            &deco.line
-        else {
+    for deco in styles.get_cloned(TextElem::deco) {
+        let DecoLine::Highlight { top_edge, bottom_edge, .. } = deco.line else {
             continue;
         };
-
-        let (top, bottom) = match &font {
-            Some(font) => font.edges(
-                *top_edge,
-                *bottom_edge,
-                font_size,
-                TextEdgeBounds::Frame(frame),
-            ),
-            None => fallback_highlight_edges(frame, *top_edge, *bottom_edge, font_size),
-        };
-
-        let size = Size::new(frame.width() + 2.0 * deco.extent, top + bottom);
-        let origin = Point::new(-deco.extent, frame.baseline() - top);
-        let rects = styled_rect(size, radius, fill.clone(), stroke);
-        frame.prepend_multiple(
-            rects
-                .into_iter()
-                .map(|shape| (origin, FrameItem::Shape(shape, Span::detached()))),
-        );
+        let (top, bottom) =
+            frame_highlight_edges(frame, font.as_ref(), font_size, top_edge, bottom_edge);
+        push_highlight_segment(segments, deco, start, width, top, bottom);
     }
+}
+
+/// Merge or append one highlight segment.
+fn push_highlight_segment(
+    segments: &mut Vec<HighlightSegment>,
+    deco: Decoration,
+    start: Abs,
+    width: Abs,
+    top: Abs,
+    bottom: Abs,
+) {
+    let end = start + width;
+    if end <= start || (top + bottom) <= Abs::zero() {
+        return;
+    }
+
+    if let Some(last) = segments.iter_mut().rev().find(|segment| segment.deco == deco)
+        && start <= last.end + Abs::pt(4.0)
+    {
+        last.end.set_max(end);
+        last.top.set_max(top);
+        last.bottom.set_max(bottom);
+        return;
+    }
+
+    segments.push(HighlightSegment { deco, start, end, top, bottom });
+}
+
+/// Resolve highlight edges for a shaped text item.
+fn text_highlight_edges(
+    engine: &Engine,
+    shaped: &ShapedText<'_>,
+    top_edge: TopEdge,
+    bottom_edge: BottomEdge,
+) -> (Abs, Abs) {
+    let mut top = Abs::zero();
+    let mut bottom = Abs::zero();
+
+    if shaped.glyphs.is_fully_empty() {
+        for family in shaped.styles.get_ref(TextElem::font) {
+            if let Some(font) = engine
+                .world
+                .book()
+                .select(family.as_str(), shaped.variant)
+                .and_then(|id| engine.world.font(id))
+            {
+                let (t, b) = font.edges(
+                    top_edge,
+                    bottom_edge,
+                    shaped.styles.resolve(TextElem::size),
+                    TextEdgeBounds::Zero,
+                );
+                top.set_max(t);
+                bottom.set_max(b);
+                break;
+            }
+        }
+    } else {
+        for glyph in shaped.glyphs.iter() {
+            let (t, b) = glyph.font.edges(
+                top_edge,
+                bottom_edge,
+                glyph.size,
+                TextEdgeBounds::Glyph(glyph.glyph_id),
+            );
+            top.set_max(t);
+            bottom.set_max(b);
+        }
+    }
+
+    (top, bottom)
+}
+
+/// Resolve highlight edges for a non-text frame item.
+fn frame_highlight_edges(
+    frame: &Frame,
+    font: Option<&Font>,
+    font_size: Abs,
+    top_edge: TopEdge,
+    bottom_edge: BottomEdge,
+) -> (Abs, Abs) {
+    let metrics = font
+        .map(|font| {
+            font.edges(top_edge, bottom_edge, font_size, TextEdgeBounds::Frame(frame))
+        })
+        .unwrap_or_else(|| {
+            fallback_highlight_edges(frame, top_edge, bottom_edge, font_size)
+        });
+
+    let top = match top_edge {
+        TopEdge::Metric(TopEdgeMetric::Baseline) | TopEdge::Length(_) => metrics.0,
+        TopEdge::Metric(_) => metrics.0.max(frame.ascent()),
+    };
+
+    let bottom = match bottom_edge {
+        BottomEdge::Metric(BottomEdgeMetric::Baseline) | BottomEdge::Length(_) => {
+            metrics.1
+        }
+        BottomEdge::Metric(_) => metrics.1.max(frame.descent()),
+    };
+
+    (top, bottom)
 }
 
 /// Resolve highlight edges if we cannot look up a concrete font.
@@ -560,6 +676,35 @@ fn fallback_highlight_edges(
     };
 
     (top, bottom)
+}
+
+/// Paint all collected highlight segments into the line frame.
+fn paint_highlight_segments(
+    output: &mut Frame,
+    segments: &[HighlightSegment],
+    line_top: Abs,
+    align_shift: Abs,
+) {
+    for segment in segments {
+        let DecoLine::Highlight { fill, stroke, radius, .. } = &segment.deco.line else {
+            continue;
+        };
+
+        let size = Size::new(
+            segment.end - segment.start + 2.0 * segment.deco.extent,
+            segment.top + segment.bottom,
+        );
+        let origin = Point::new(
+            segment.start - segment.deco.extent + align_shift,
+            line_top - segment.top,
+        );
+        let rects = styled_rect(size, radius, fill.clone(), stroke);
+        output.prepend_multiple(
+            rects
+                .into_iter()
+                .map(|shape| (origin, FrameItem::Shape(shape, Span::detached()))),
+        );
+    }
 }
 
 /// Commit to a line and build its frame.
@@ -604,6 +749,7 @@ pub fn commit(
 
     let mut top = Abs::zero();
     let mut bottom = Abs::zero();
+    let mut highlight_segments: Vec<HighlightSegment> = vec![];
 
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
@@ -628,7 +774,15 @@ pub fn commit(
                         layout_box(elem, engine, loc.relayout(), styles, region)
                     })?;
                     apply_shift(&engine.world, &mut frame, *styles);
-                    decorate_frame_highlights(&engine.world, &mut frame, *styles);
+                    let start = offset;
+                    collect_frame_highlights(
+                        &engine.world,
+                        &mut highlight_segments,
+                        &frame,
+                        *styles,
+                        start,
+                        frame.width(),
+                    );
                     push(&mut offset, frame, idx);
                 } else {
                     offset += amount;
@@ -641,11 +795,27 @@ pub fn commit(
                     justification_ratio,
                     extra_justification,
                 );
+                let start = offset;
+                collect_text_highlights(
+                    engine,
+                    &mut highlight_segments,
+                    shaped,
+                    start,
+                    frame.width(),
+                );
                 push(&mut offset, frame, idx);
             }
             Item::Frame(frame, styles) => {
-                let mut frame = frame.clone();
-                decorate_frame_highlights(&engine.world, &mut frame, *styles);
+                let frame = frame.clone();
+                let start = offset;
+                collect_frame_highlights(
+                    &engine.world,
+                    &mut highlight_segments,
+                    &frame,
+                    *styles,
+                    start,
+                    frame.width(),
+                );
                 push(&mut offset, frame, idx);
             }
             Item::Tag(tag) => {
@@ -670,6 +840,9 @@ pub fn commit(
         add_par_line_marker(&mut output, marker, engine, locator, top);
     }
 
+    let align_shift = p.config.align.position(remaining);
+    paint_highlight_segments(&mut output, &highlight_segments, top, align_shift);
+
     // Ensure that the final frame's items are in logical order rather than in
     // visual order. This is important because it affects the order of elements
     // during introspection and thus things like counters.
@@ -677,7 +850,7 @@ pub fn commit(
 
     // Construct the line's frame.
     for (offset, frame, _) in frames {
-        let x = offset + p.config.align.position(remaining);
+        let x = offset + align_shift;
         let y = top - frame.baseline();
         output.push_frame(Point::new(x, y), frame);
     }

@@ -13,8 +13,9 @@ use typst_library::foundations::{Smart, StyleChain};
 use typst_library::layout::{Abs, Dir, Em, Frame, FrameItem, Point, Rel, Size};
 use typst_library::model::{JustificationLimits, ParElem};
 use typst_library::text::{
-    Font, FontFamily, FontVariant, Glyph, Lang, Region, ShiftSettings, TextEdgeBounds,
-    TextElem, TextItem, families, features, is_default_ignorable, language, variant,
+    DecoLine, Font, FontFamily, FontVariant, Glyph, Lang, Region, ShiftSettings,
+    TextEdgeBounds, TextElem, TextItem, families, features, is_default_ignorable,
+    language, variant,
 };
 use typst_utils::SliceExt;
 use unicode_bidi::{BidiInfo, Level as BidiLevel};
@@ -450,6 +451,11 @@ impl<'a> ShapedText<'a> {
                 // Apply line decorations.
                 frame.push(pos, FrameItem::Text(item.clone()));
                 for deco in &decos {
+                    // Inline highlight is painted in line commit so it can be
+                    // continuous across mixed text and frame items.
+                    if matches!(deco.line, DecoLine::Highlight { .. }) {
+                        continue;
+                    }
                     decorate(&mut frame, deco, &item, width, shift, pos);
                 }
             }

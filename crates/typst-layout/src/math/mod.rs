@@ -31,9 +31,10 @@ use typst_library::math::*;
 use typst_library::model::ParElem;
 use typst_library::routines::{Arenas, RealizationKind};
 use typst_library::text::{
-    DecoLine, Font, FontFlags, LinebreakElem, SpaceElem, TextEdgeBounds, TextElem,
-    variant,
+    BottomEdge, BottomEdgeMetric, DecoLine, Decoration, Font, FontFlags, LinebreakElem,
+    SpaceElem, TextEdgeBounds, TextElem, TopEdge, TopEdgeMetric, variant,
 };
+use typst_library::visualize::{Geometry, Paint};
 use typst_syntax::Span;
 use typst_utils::{LazyHash, Numeric};
 
@@ -67,6 +68,8 @@ pub fn layout_equation_inline(
 
     let scale_style = style_for_script_scale(&font);
     let styles = styles.chain(&scale_style);
+    let (_, deco_reset) = extract_highlight_decorations(styles);
+    let styles = deco_reset.as_ref().map_or(styles, |reset| styles.chain(reset));
 
     let run = ctx.layout_into_run(&elem.body, styles)?;
 
@@ -123,6 +126,8 @@ pub fn layout_equation_block(
 
     let scale_style = style_for_script_scale(&font);
     let styles = styles.chain(&scale_style);
+    let (highlight_decos, deco_reset) = extract_highlight_decorations(styles);
+    let styles = deco_reset.as_ref().map_or(styles, |reset| styles.chain(reset));
 
     let full_equation_builder = ctx
         .layout_into_run(&elem.body, styles)?
@@ -239,13 +244,41 @@ pub fn layout_equation_block(
             .collect()
     };
 
-    decorate_math_highlights(&mut frames, styles, &font);
+    decorate_math_highlights(&mut frames, &highlight_decos, styles, &font);
     Ok(Fragment::frames(frames))
 }
 
-/// Apply text highlight decorations to equation frames.
-fn decorate_math_highlights(frames: &mut [Frame], styles: StyleChain, font: &Font) {
+/// Extract highlight decorations and return an optional style reset that removes
+/// them from the inner math layout.
+fn extract_highlight_decorations(
+    styles: StyleChain,
+) -> (Vec<Decoration>, Option<LazyHash<Style>>) {
     let decos = styles.get_cloned(TextElem::deco);
+    if decos.is_empty() {
+        return (vec![], None);
+    }
+
+    let mut highlights: Vec<Decoration> = vec![];
+    let mut inner_decos = decos;
+    inner_decos.retain(|deco| {
+        let highlight = matches!(deco.line, DecoLine::Highlight { .. });
+        if highlight {
+            highlights.push(deco.clone());
+        }
+        !highlight
+    });
+
+    let reset = (!highlights.is_empty()).then(|| TextElem::deco.set(inner_decos).wrap());
+    (highlights, reset)
+}
+
+/// Apply text highlight decorations to equation frames.
+fn decorate_math_highlights(
+    frames: &mut [Frame],
+    decos: &[Decoration],
+    styles: StyleChain,
+    font: &Font,
+) {
     if decos.is_empty() {
         return;
     }
@@ -253,19 +286,20 @@ fn decorate_math_highlights(frames: &mut [Frame], styles: StyleChain, font: &Fon
     let font_size = styles.resolve(TextElem::size);
 
     for frame in frames {
-        for deco in &decos {
+        for deco in decos {
+            let DecoLine::Highlight { fill, .. } = &deco.line else { continue };
+            strip_inner_highlight_shapes(frame, fill);
+        }
+
+        for deco in decos {
             let DecoLine::Highlight { fill, stroke, top_edge, bottom_edge, radius } =
                 &deco.line
             else {
                 continue;
             };
 
-            let (top, bottom) = font.edges(
-                *top_edge,
-                *bottom_edge,
-                font_size,
-                TextEdgeBounds::Frame(frame),
-            );
+            let (top, bottom) =
+                math_highlight_edges(frame, font, font_size, *top_edge, *bottom_edge);
 
             let size = Size::new(frame.width() + 2.0 * deco.extent, top + bottom);
             let origin = Point::new(-deco.extent, frame.baseline() - top);
@@ -275,6 +309,61 @@ fn decorate_math_highlights(frames: &mut [Frame], styles: StyleChain, font: &Fon
                     .into_iter()
                     .map(|shape| (origin, FrameItem::Shape(shape, Span::detached()))),
             );
+        }
+    }
+}
+
+/// Resolve highlight edges for an equation frame.
+fn math_highlight_edges(
+    frame: &Frame,
+    font: &Font,
+    font_size: Abs,
+    top_edge: TopEdge,
+    bottom_edge: BottomEdge,
+) -> (Abs, Abs) {
+    let (metric_top, metric_bottom) =
+        font.edges(top_edge, bottom_edge, font_size, TextEdgeBounds::Frame(frame));
+
+    let top = match top_edge {
+        TopEdge::Metric(TopEdgeMetric::Baseline) | TopEdge::Length(_) => metric_top,
+        TopEdge::Metric(_) => metric_top.max(frame.ascent()),
+    };
+
+    let bottom = match bottom_edge {
+        BottomEdge::Metric(BottomEdgeMetric::Baseline) | BottomEdge::Length(_) => {
+            metric_bottom
+        }
+        BottomEdge::Metric(_) => metric_bottom.max(frame.descent()),
+    };
+
+    (top, bottom)
+}
+
+/// Remove inner highlight rectangles so the outer equation highlight isn't
+/// duplicated for math text fragments.
+fn strip_inner_highlight_shapes(frame: &mut Frame, fill: &Option<Paint>) {
+    let items: Vec<_> = frame.items().cloned().collect();
+    frame.clear();
+
+    for (pos, item) in items {
+        match item {
+            FrameItem::Group(mut group) => {
+                strip_inner_highlight_shapes(&mut group.frame, fill);
+                if !group.frame.is_empty() {
+                    frame.push(pos, FrameItem::Group(group));
+                }
+            }
+            FrameItem::Shape(shape, span)
+                if span.is_detached()
+                    && shape.fill == *fill
+                    && matches!(
+                        shape.geometry,
+                        Geometry::Rect(_) | Geometry::Curve(_)
+                    ) =>
+            {
+                continue;
+            }
+            item => frame.push(pos, item),
         }
     }
 }
