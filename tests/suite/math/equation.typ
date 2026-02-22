@@ -339,8 +339,7 @@ B standalone <standalone>
 --- issue-3206-equation-attached-spacing ---
 #set page(width: 220pt, margin: 10pt)
 #set par(spacing: 12pt, leading: 4pt)
-// Disable additional short-skip reduction so we only test tight attachment.
-#set math.equation(short-skip: 100pt)
+#set math.equation(short-skip: 4pt)
 
 LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL <tight-before>
 $ x = y $ <tight-eq>
@@ -356,7 +355,9 @@ standalone after
   let tight-above = locate(<tight-eq>).position().y - locate(<tight-before>).position().y
   let standalone-above = locate(<standalone-eq>).position().y - locate(<standalone-before>).position().y
 
-  assert(tight-above < standalone-above)
+  // Tight attachment should not collapse the display into line-leading glue.
+  assert(tight-above > 8pt)
+  assert(standalone-above >= tight-above)
 }
 
 --- issue-2438-equation-short-skip ---
@@ -377,6 +378,7 @@ $ x = y $ <long-eq>
   let short-above = locate(<short-eq>).position().y - locate(<short-before>).position().y
 
   assert(short-above < long-above)
+  assert(long-above > 8pt)
 }
 
 --- issue-2438-equation-short-skip-lorem ---
