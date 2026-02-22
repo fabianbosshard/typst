@@ -241,10 +241,9 @@ impl Destination {
             &Destination::Location(loc) => {
                 let fallback = |engine: &mut Engine| {
                     // Fall back to a generating a page reference.
-                    let numbering =
-                        loc.page_numbering(engine).unwrap_or_else(|| {
-                            NumberingPattern::from_str("1").unwrap().into()
-                        });
+                    let numbering = loc.page_numbering(engine).unwrap_or_else(|| {
+                        NumberingPattern::from_str("1").unwrap().into()
+                    });
                     let page_nr = Counter::new(CounterKey::Page)
                         .display_at_loc(engine, loc, styles, &numbering)?
                         .plain_text();
