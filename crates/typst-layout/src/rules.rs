@@ -124,7 +124,7 @@ const EMPH_RULE: ShowFn<EmphElem> =
 const LIST_RULE: ShowFn<ListElem> = |elem, _, styles| {
     let tight = elem.tight.get(styles);
     let mut block = BlockElem::multi_layouter(elem.clone(), crate::lists::layout_list)
-        .with_par_attach(tight);
+        .with_par_attach(true);
 
     if tight {
         let spacing = elem
@@ -140,7 +140,7 @@ const LIST_RULE: ShowFn<ListElem> = |elem, _, styles| {
 const ENUM_RULE: ShowFn<EnumElem> = |elem, _, styles| {
     let tight = elem.tight.get(styles);
     let mut block = BlockElem::multi_layouter(elem.clone(), crate::lists::layout_enum)
-        .with_par_attach(tight);
+        .with_par_attach(true);
 
     if tight {
         let spacing = elem
