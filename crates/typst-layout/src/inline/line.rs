@@ -4,15 +4,20 @@ use std::ops::{Deref, DerefMut};
 use typst_library::engine::Engine;
 use typst_library::foundations::Resolve;
 use typst_library::introspection::{SplitLocator, Tag, TagFlags};
-use typst_library::layout::{Abs, Dir, Em, Fr, Frame, FrameItem, Point};
+use typst_library::layout::{Abs, Dir, Em, Fr, Frame, FrameItem, Point, Size};
 use typst_library::model::ParLineMarker;
-use typst_library::text::{Lang, TextElem, variant};
+use typst_library::text::{
+    BottomEdge, BottomEdgeMetric, DecoLine, Lang, TextEdgeBounds, TextElem, TopEdge,
+    TopEdgeMetric, variant,
+};
+use typst_syntax::Span;
 use typst_utils::Numeric;
 
 use super::*;
 use crate::inline::linebreak::Trim;
 use crate::inline::shaping::Adjustability;
 use crate::modifiers::layout_and_modify;
+use crate::shapes::styled_rect;
 
 const SHY: char = '\u{ad}';
 const HYPHEN: char = '-';
@@ -95,7 +100,7 @@ impl Line<'_> {
     pub fn has_negative_width_items(&self) -> bool {
         self.items.iter().any(|item| match item {
             Item::Absolute(amount, _) => *amount < Abs::zero(),
-            Item::Frame(frame) => frame.width() < Abs::zero(),
+            Item::Frame(frame, _) => frame.width() < Abs::zero(),
             _ => false,
         })
     }
@@ -478,6 +483,85 @@ pub fn apply_shift<'a>(
     frame.translate(Point::new(compensation, baseline));
 }
 
+/// Apply highlight decorations for a frame-level inline item.
+fn decorate_frame_highlights<'a>(
+    world: &Tracked<'a, dyn World + 'a>,
+    frame: &mut Frame,
+    styles: StyleChain,
+) {
+    let decos = styles.get_cloned(TextElem::deco);
+    if decos.is_empty() {
+        return;
+    }
+
+    let font = styles.get_ref(TextElem::font).into_iter().find_map(|family| {
+        world
+            .book()
+            .select(family.as_str(), variant(styles))
+            .and_then(|id| world.font(id))
+    });
+    let font_size = styles.resolve(TextElem::size);
+
+    for deco in &decos {
+        let DecoLine::Highlight { fill, stroke, top_edge, bottom_edge, radius } =
+            &deco.line
+        else {
+            continue;
+        };
+
+        let (top, bottom) = match &font {
+            Some(font) => font.edges(
+                *top_edge,
+                *bottom_edge,
+                font_size,
+                TextEdgeBounds::Frame(frame),
+            ),
+            None => fallback_highlight_edges(frame, *top_edge, *bottom_edge, font_size),
+        };
+
+        let size = Size::new(frame.width() + 2.0 * deco.extent, top + bottom);
+        let origin = Point::new(-deco.extent, frame.baseline() - top);
+        let rects = styled_rect(size, radius, fill.clone(), stroke);
+        frame.prepend_multiple(
+            rects
+                .into_iter()
+                .map(|shape| (origin, FrameItem::Shape(shape, Span::detached()))),
+        );
+    }
+}
+
+/// Resolve highlight edges if we cannot look up a concrete font.
+fn fallback_highlight_edges(
+    frame: &Frame,
+    top_edge: TopEdge,
+    bottom_edge: BottomEdge,
+    font_size: Abs,
+) -> (Abs, Abs) {
+    let top = match top_edge {
+        TopEdge::Length(length) => length.at(font_size),
+        TopEdge::Metric(metric) => {
+            if metric == TopEdgeMetric::Baseline {
+                Abs::zero()
+            } else {
+                frame.ascent()
+            }
+        }
+    };
+
+    let bottom = match bottom_edge {
+        BottomEdge::Length(length) => -length.at(font_size),
+        BottomEdge::Metric(metric) => {
+            if metric == BottomEdgeMetric::Baseline {
+                Abs::zero()
+            } else {
+                frame.descent()
+            }
+        }
+    };
+
+    (top, bottom)
+}
+
 /// Commit to a line and build its frame.
 #[allow(clippy::too_many_arguments)]
 pub fn commit(
@@ -544,6 +628,7 @@ pub fn commit(
                         layout_box(elem, engine, loc.relayout(), styles, region)
                     })?;
                     apply_shift(&engine.world, &mut frame, *styles);
+                    decorate_frame_highlights(&engine.world, &mut frame, *styles);
                     push(&mut offset, frame, idx);
                 } else {
                     offset += amount;
@@ -558,8 +643,10 @@ pub fn commit(
                 );
                 push(&mut offset, frame, idx);
             }
-            Item::Frame(frame) => {
-                push(&mut offset, frame.clone(), idx);
+            Item::Frame(frame, styles) => {
+                let mut frame = frame.clone();
+                decorate_frame_highlights(&engine.world, &mut frame, *styles);
+                push(&mut offset, frame, idx);
             }
             Item::Tag(tag) => {
                 let mut frame = Frame::soft(Size::zero());

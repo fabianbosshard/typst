@@ -23,15 +23,16 @@ use typst_library::foundations::{
 };
 use typst_library::introspection::{Counter, Locator, SplitLocator, TagElem};
 use typst_library::layout::{
-    Abs, AlignElem, Axes, BlockElem, BoxElem, Em, FixedAlignment, Fragment, Frame, HElem,
-    InlineItem, OuterHAlignment, PlaceElem, Point, Region, Regions, Size, Spacing,
-    SpecificAlignment, VAlignment,
+    Abs, AlignElem, Axes, BlockElem, BoxElem, Em, FixedAlignment, Fragment, Frame,
+    FrameItem, HElem, InlineItem, OuterHAlignment, PlaceElem, Point, Region, Regions,
+    Size, Spacing, SpecificAlignment, VAlignment,
 };
 use typst_library::math::*;
 use typst_library::model::ParElem;
 use typst_library::routines::{Arenas, RealizationKind};
 use typst_library::text::{
-    Font, FontFlags, LinebreakElem, SpaceElem, TextEdgeBounds, TextElem, variant,
+    DecoLine, Font, FontFlags, LinebreakElem, SpaceElem, TextEdgeBounds, TextElem,
+    variant,
 };
 use typst_syntax::Span;
 use typst_utils::{LazyHash, Numeric};
@@ -44,6 +45,7 @@ use self::fragment::{
 use self::run::{LeftRightAlternator, MathRun, MathRunFrameBuilder};
 use self::shared::*;
 use self::stretch::stretch_fragment;
+use crate::shapes::styled_rect;
 
 /// Layout an inline equation (in a paragraph).
 #[typst_macros::time(span = elem.span())]
@@ -194,50 +196,87 @@ pub fn layout_equation_block(
         vec![full_equation_builder]
     };
 
-    let Some(numbering) = elem.numbering.get_ref(styles) else {
-        let frames = equation_builders
+    let mut frames: Vec<Frame> = if let Some(numbering) = elem.numbering.get_ref(styles) {
+        let pod = Region::new(regions.base(), Axes::splat(false));
+        let counter = Counter::of(EquationElem::ELEM)
+            .display_at_loc(engine, elem.location().unwrap(), styles, numbering)?
+            .spanned(span);
+        let number =
+            crate::layout_frame(engine, &counter, locator.next(&()), styles, pod)?;
+
+        static NUMBER_GUTTER: Em = Em::new(0.5);
+        let full_number_width = number.width() + NUMBER_GUTTER.resolve(styles);
+
+        let number_align = match elem.number_align.get(styles) {
+            SpecificAlignment::H(h) => SpecificAlignment::Both(h, VAlignment::Horizon),
+            SpecificAlignment::V(v) => SpecificAlignment::Both(OuterHAlignment::End, v),
+            SpecificAlignment::Both(h, v) => SpecificAlignment::Both(h, v),
+        };
+
+        // Add equation numbers to each equation region.
+        let region_count = equation_builders.len();
+        equation_builders
+            .into_iter()
+            .map(|builder| {
+                if builder.frames.is_empty() && region_count > 1 {
+                    // Don't number empty regions, but do number empty equations.
+                    return builder.build();
+                }
+                add_equation_number(
+                    builder,
+                    number.clone(),
+                    number_align.resolve(styles),
+                    styles.get(AlignElem::alignment).resolve(styles).x,
+                    regions.size.x,
+                    full_number_width,
+                )
+            })
+            .collect()
+    } else {
+        equation_builders
             .into_iter()
             .map(MathRunFrameBuilder::build)
-            .collect();
-        return Ok(Fragment::frames(frames));
+            .collect()
     };
 
-    let pod = Region::new(regions.base(), Axes::splat(false));
-    let counter = Counter::of(EquationElem::ELEM)
-        .display_at_loc(engine, elem.location().unwrap(), styles, numbering)?
-        .spanned(span);
-    let number = crate::layout_frame(engine, &counter, locator.next(&()), styles, pod)?;
-
-    static NUMBER_GUTTER: Em = Em::new(0.5);
-    let full_number_width = number.width() + NUMBER_GUTTER.resolve(styles);
-
-    let number_align = match elem.number_align.get(styles) {
-        SpecificAlignment::H(h) => SpecificAlignment::Both(h, VAlignment::Horizon),
-        SpecificAlignment::V(v) => SpecificAlignment::Both(OuterHAlignment::End, v),
-        SpecificAlignment::Both(h, v) => SpecificAlignment::Both(h, v),
-    };
-
-    // Add equation numbers to each equation region.
-    let region_count = equation_builders.len();
-    let frames = equation_builders
-        .into_iter()
-        .map(|builder| {
-            if builder.frames.is_empty() && region_count > 1 {
-                // Don't number empty regions, but do number empty equations.
-                return builder.build();
-            }
-            add_equation_number(
-                builder,
-                number.clone(),
-                number_align.resolve(styles),
-                styles.get(AlignElem::alignment).resolve(styles).x,
-                regions.size.x,
-                full_number_width,
-            )
-        })
-        .collect();
-
+    decorate_math_highlights(&mut frames, styles, &font);
     Ok(Fragment::frames(frames))
+}
+
+/// Apply text highlight decorations to equation frames.
+fn decorate_math_highlights(frames: &mut [Frame], styles: StyleChain, font: &Font) {
+    let decos = styles.get_cloned(TextElem::deco);
+    if decos.is_empty() {
+        return;
+    }
+
+    let font_size = styles.resolve(TextElem::size);
+
+    for frame in frames {
+        for deco in &decos {
+            let DecoLine::Highlight { fill, stroke, top_edge, bottom_edge, radius } =
+                &deco.line
+            else {
+                continue;
+            };
+
+            let (top, bottom) = font.edges(
+                *top_edge,
+                *bottom_edge,
+                font_size,
+                TextEdgeBounds::Frame(frame),
+            );
+
+            let size = Size::new(frame.width() + 2.0 * deco.extent, top + bottom);
+            let origin = Point::new(-deco.extent, frame.baseline() - top);
+            let rects = styled_rect(size, radius, fill.clone(), stroke);
+            frame.prepend_multiple(
+                rects
+                    .into_iter()
+                    .map(|shape| (origin, FrameItem::Shape(shape, Span::detached()))),
+            );
+        }
+    }
 }
 
 fn add_equation_number(

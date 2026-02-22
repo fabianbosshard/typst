@@ -84,6 +84,23 @@ We can also specify a customized value
 #highlight(stroke: (top: blue, left: red, bottom: green, right: orange))[abc]
 #highlight(stroke: 1pt, radius: 3pt)[#lorem(5)]
 
+--- highlight-math-inline ---
+// Test highlight for inline math with mixed content and wrapping.
+#set page(width: 140pt, height: auto, margin: 8pt)
+#block(width: 92pt)[#highlight[Words before $x + y^2$ and after, with wrapping.]]
+#highlight[$ integral_0^1 x dif x $]
+
+--- highlight-math-display ---
+// Test highlight for display math with non-default edges, extent, and radius.
+#set page(width: 140pt, height: auto, margin: 8pt)
+#set highlight(top-edge: "bounds", bottom-edge: "bounds", extent: 1.2pt, radius: 2pt)
+#highlight[$ x^2 + y^2 = z^2 $]
+#highlight[
+  Before.
+  $ sum_(i=1)^n i = n(n+1)/2 $
+  After.
+]
+
 --- html-deco html ---
 #strike[Struck]
 #highlight[Highlighted]
